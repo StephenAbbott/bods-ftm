@@ -1,0 +1,189 @@
+[
+  {
+    "statementId": "1a2b3c4d-0001-0000-0000-000000000001",
+    "statementType": "entityStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "entityType": {"type": "registeredEntity"},
+      "names": [{"fullName": "Acme Holdings Ltd"}],
+      "identifiers": [
+        {"id": "12345678", "scheme": "GB-COH", "schemeName": "Companies House"},
+        {"id": "213800ACME0000001A80", "scheme": "XI-LEI", "schemeName": "GLEIF"}
+      ],
+      "incorporatedInJurisdiction": {"code": "GB", "name": "United Kingdom"},
+      "foundingDate": "2005-03-14",
+      "addresses": [
+        {
+          "type": "registered",
+          "address": "1 Example Street, London EC1A 1AA",
+          "country": {"code": "GB", "name": "United Kingdom"}
+        }
+      ],
+      "isComponent": false
+    }
+  },
+  {
+    "statementId": "1a2b3c4d-0002-0000-0000-000000000002",
+    "statementType": "entityStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "entityType": {"type": "registeredEntity"},
+      "names": [{"fullName": "Acme Trading Ltd"}],
+      "identifiers": [
+        {"id": "87654321", "scheme": "GB-COH", "schemeName": "Companies House"}
+      ],
+      "incorporatedInJurisdiction": {"code": "GB", "name": "United Kingdom"},
+      "foundingDate": "2010-06-01",
+      "addresses": [
+        {
+          "type": "registered",
+          "address": "2 Example Street, London EC1A 2BB",
+          "country": {"code": "GB", "name": "United Kingdom"}
+        }
+      ],
+      "isComponent": false
+    }
+  },
+  {
+    "statementId": "1a2b3c4d-0003-0000-0000-000000000003",
+    "statementType": "personStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "personType": "knownPerson",
+      "names": [{"fullName": "Jane Smith"}],
+      "nationalities": [{"code": "GB", "name": "United Kingdom"}],
+      "birthDate": "1975-04-22",
+      "identifiers": [
+        {"id": "AB123456C", "scheme": "GB-NIN", "schemeName": "National Insurance Number"}
+      ],
+      "addresses": [
+        {
+          "type": "residence",
+          "address": "10 Downing Street, London SW1A 2AA",
+          "country": {"code": "GB", "name": "United Kingdom"}
+        }
+      ],
+      "isComponent": false
+    }
+  },
+  {
+    "statementId": "1a2b3c4d-0004-0000-0000-000000000004",
+    "statementType": "ownershipOrControlStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "subject": {"describedByEntityStatement": "1a2b3c4d-0002-0000-0000-000000000002"},
+      "interestedParty": {"describedByEntityStatement": "1a2b3c4d-0001-0000-0000-000000000001"},
+      "interests": [
+        {
+          "type": "shareholding",
+          "share": {"exact": 100.0},
+          "directOrIndirect": "direct",
+          "beneficialOwnershipOrControl": false,
+          "startDate": "2010-06-01"
+        }
+      ],
+      "isComponent": false,
+      "componentStatementIDs": []
+    }
+  },
+  {
+    "statementId": "1a2b3c4d-0005-0000-0000-000000000005",
+    "statementType": "ownershipOrControlStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "subject": {"describedByEntityStatement": "1a2b3c4d-0001-0000-0000-000000000001"},
+      "interestedParty": {"describedByPersonStatement": "1a2b3c4d-0003-0000-0000-000000000003"},
+      "interests": [
+        {
+          "type": "shareholding",
+          "share": {"exact": 75.0},
+          "directOrIndirect": "direct",
+          "beneficialOwnershipOrControl": true,
+          "startDate": "2005-03-14"
+        },
+        {
+          "type": "votingRights",
+          "share": {"exact": 75.0},
+          "directOrIndirect": "direct",
+          "beneficialOwnershipOrControl": true,
+          "startDate": "2005-03-14"
+        }
+      ],
+      "isComponent": false,
+      "componentStatementIDs": []
+    }
+  },
+  {
+    "statementId": "1a2b3c4d-0006-0000-0000-000000000006",
+    "statementType": "ownershipOrControlStatement",
+    "statementDate": "2024-01-15",
+    "publicationDetails": {
+      "publicationDate": "2024-01-15",
+      "bodsVersion": "0.4.0",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "publisher": {
+        "name": "Example Register",
+        "uri": "https://example.com/register"
+      }
+    },
+    "recordDetails": {
+      "subject": {"describedByEntityStatement": "1a2b3c4d-0001-0000-0000-000000000001"},
+      "interestedParty": {"describedByPersonStatement": "1a2b3c4d-0003-0000-0000-000000000003"},
+      "interests": [
+        {
+          "type": "boardMember",
+          "directOrIndirect": "direct",
+          "beneficialOwnershipOrControl": false,
+          "startDate": "2005-03-14"
+        }
+      ],
+      "isComponent": false,
+      "componentStatementIDs": []
+    }
+  }
+]
