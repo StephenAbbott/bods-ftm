@@ -6,7 +6,7 @@ Bidirectional converter between [Beneficial Ownership Data Standard (BODS) v0.4]
 
 [OpenSanctions](https://www.opensanctions.org/), [OpenAleph](https://openaleph.org/), and the broader investigative data ecosystem publish a large number of datasets in FollowTheMoney format — including company registries, ownership structures, sanctions lists, and PEP data. The [Data Research Center library](https://dataresearchcenter.org/library/) catalogues many of them. Any dataset in that library that contains ownership information can, in principle, be converted into BODS v0.4 for use by beneficial ownership transparency tools, registers, and policy analysis.
 
-Earlier work ([opensanctions/bods-ftm](https://github.com/opensanctions/bods-ftm), [pudo-attic/opensanctions-kyb-graph-old](https://github.com/pudo-attic/opensanctions-kyb-graph-old)) showed how to map [OpenOwnership](https://www.openownership.org/) BODS v0.2 data into FtM. BODS v0.4 introduced significant structural changes — including the `recordDetails` nesting, the `isComponent` / `componentStatementIDs` pattern for indirect chains, and a richer `entityType` object — that make a fresh mapping necessary. This repository fills that gap.
+Earlier work ([opensanctions/bods-ftm](https://github.com/opensanctions/bods-ftm), [pudo-attic/opensanctions-kyb-graph-old](https://github.com/pudo-attic/opensanctions-kyb-graph-old)) showed how to map [Open Ownership](https://www.openownership.org/) BODS v0.2 data into FtM. BODS v0.4 introduced significant structural changes — including the `recordDetails` nesting, the `isComponent` / `componentStatementIDs` pattern for indirect chains, and a richer `entityType` object — that make a fresh mapping necessary. This repository fills that gap.
 
 ## What it converts
 
