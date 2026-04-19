@@ -6,7 +6,7 @@ from followthemoney import model
 from followthemoney.proxy import EntityProxy
 
 from bods_ftm.utils.dates import normalise_date
-from bods_ftm.utils.ids import bods_statement_id_to_ftm_id, make_ftm_relationship_id
+from bods_ftm.utils.ids import bods_record_id_to_ftm_id, make_ftm_relationship_id
 
 # FollowTheMoney schema to use for each BODS interest type.
 # Directorship is used for roles that represent control through a position;
@@ -37,8 +37,6 @@ INTEREST_TYPE_TO_FTM_SCHEMA: dict[str, str] = {
     "unpublishedInterest": "UnknownLink",
 }
 
-# For Ownership: which property holds the owner reference
-# For Directorship: which property holds the person reference
 _OWNER_PROP = {
     "Ownership": "owner",
     "Directorship": "director",
@@ -53,47 +51,54 @@ _ASSET_PROP = {
 
 def ooc_statement_to_ftm(
     statement: dict[str, Any],
-    statement_index: dict[str, dict[str, Any]],
+    record_index: dict[str, dict[str, Any]],
 ) -> list[EntityProxy]:
-    """Convert a BODS v0.4 ownership-or-control statement to FTM edge entities.
+    """Convert a BODS v0.4 relationship statement to FTM edge entities (and
+    a placeholder LegalEntity owner if the interestedParty is an inline
+    Unspecified Record).
 
-    One FTM entity is produced per interest in the interests[] array.  This
-    preserves the full BODS interest list rather than collapsing to a single
-    relationship.
+    record_index maps recordId → statement and is used to verify that
+    subject/interestedParty references resolve. The FTM ID for an entity is
+    its recordId (passed through unchanged).
 
-    statement_index maps statementId → statement dict and is used to look up
-    the FTM IDs of subject and interestedParty entities.
+    One FTM entity is produced per interest in the interests[] array.
     """
     details = statement.get("recordDetails", {})
     proxies: list[EntityProxy] = []
 
-    subject_ref = details.get("subject", {})
-    subject_stmt_id = subject_ref.get("describedByEntityStatement") if isinstance(subject_ref, dict) else None
-    if not subject_stmt_id:
+    subject_ref = details.get("subject")
+    if not isinstance(subject_ref, str) or subject_ref not in record_index:
+        return []
+    asset_ftm_id = bods_record_id_to_ftm_id(subject_ref)
+
+    interested_party = details.get("interestedParty")
+    owner_ftm_id: str | None = None
+    unspecified_reason: str | None = None
+    unspecified_description: str | None = None
+    placeholder_owner: EntityProxy | None = None
+
+    if isinstance(interested_party, str):
+        if interested_party not in record_index:
+            return []
+        owner_ftm_id = bods_record_id_to_ftm_id(interested_party)
+    elif isinstance(interested_party, dict):
+        unspecified_reason = interested_party.get("reason")
+        unspecified_description = interested_party.get("description")
+        if unspecified_reason:
+            placeholder_owner, owner_ftm_id = _make_unspecified_owner(
+                unspecified_reason, unspecified_description, subject_ref
+            )
+
+    if owner_ftm_id is None:
         return []
 
-    asset_ftm_id = bods_statement_id_to_ftm_id(subject_stmt_id)
-
-    interested_party = details.get("interestedParty", {})
-    if not isinstance(interested_party, dict):
-        return []
-
-    owner_stmt_id = interested_party.get(
-        "describedByPersonStatement"
-    ) or interested_party.get("describedByEntityStatement")
-
-    # Unspecified interested party — represent as a placeholder LegalEntity
-    unspecified = interested_party.get("unspecified")
-    if unspecified and not owner_stmt_id:
-        owner_ftm_id = _make_unspecified_entity(unspecified, subject_stmt_id)
-    elif owner_stmt_id:
-        owner_ftm_id = bods_statement_id_to_ftm_id(owner_stmt_id)
-    else:
-        return []
+    if placeholder_owner is not None:
+        proxies.append(placeholder_owner)
 
     interests = details.get("interests", [])
     if not interests:
-        # Create a single UnknownLink if no interests are listed
+        # No declared interests (common when interestedParty is unspecified) —
+        # emit a single UnknownLink so the inline reason is preserved.
         interests = [{"type": "unknownInterest"}]
 
     for idx, interest in enumerate(interests):
@@ -112,11 +117,8 @@ def ooc_statement_to_ftm(
 
         proxy.add(owner_prop, owner_ftm_id, quiet=True)
         proxy.add(asset_prop, asset_ftm_id, quiet=True)
-
-        # Role / interest type as a human-readable label
         proxy.add("role", interest_type, quiet=True)
 
-        # Share / percentage
         share = interest.get("share", {})
         if isinstance(share, dict):
             exact = share.get("exact")
@@ -130,7 +132,6 @@ def ooc_statement_to_ftm(
                 elif maximum is not None:
                     proxy.add("percentage", str(maximum), quiet=True)
 
-        # Dates
         start = normalise_date(interest.get("startDate"))
         if start:
             proxy.add("startDate", start, quiet=True)
@@ -138,17 +139,25 @@ def ooc_statement_to_ftm(
         if end:
             proxy.add("endDate", end, quiet=True)
 
-        # Direct / indirect as a status note
         direct_or_indirect = interest.get("directOrIndirect")
         if direct_or_indirect:
             proxy.add("status", direct_or_indirect, quiet=True)
 
-        # Beneficial ownership flag embedded in summary
-        boc = interest.get("beneficialOwnershipOrControl")
-        if boc is True:
+        if interest.get("beneficialOwnershipOrControl") is True:
             proxy.add("summary", "beneficial ownership or control", quiet=True)
 
-        # isComponent flag on the OOC statement
+        # Inline-unspecified interestedParty: preserve the reason code and
+        # description on the relationship as well as on the placeholder owner.
+        # FATF treats declared-unknown UBOs as a material signal — silently
+        # dropping the reason understates opacity risk.
+        if unspecified_reason:
+            description_parts = [
+                f"Unspecified interestedParty (reason: {unspecified_reason})"
+            ]
+            if unspecified_description:
+                description_parts.append(unspecified_description)
+            proxy.add("description", " — ".join(description_parts), quiet=True)
+
         is_component = details.get("isComponent", False)
         if is_component:
             component_ids = details.get("componentStatementIDs", [])
@@ -159,7 +168,6 @@ def ooc_statement_to_ftm(
                     quiet=True,
                 )
 
-        # Source provenance
         statement_date = statement.get("statementDate")
         if statement_date:
             proxy.add("modifiedAt", statement_date, quiet=True)
@@ -175,7 +183,18 @@ def ooc_statement_to_ftm(
     return proxies
 
 
-def _make_unspecified_entity(unspecified: dict[str, Any], context_id: str) -> str:
-    """Create a placeholder LegalEntity FTM ID for an unspecified interested party."""
-    reason = unspecified.get("reason", "unknown")
-    return make_ftm_relationship_id("unspecified", reason, context_id)
+def _make_unspecified_owner(
+    reason: str, description: str | None, subject_record_id: str
+) -> tuple[EntityProxy, str]:
+    """Emit a placeholder LegalEntity standing in for an unspecified interested
+    party. The reason code and any description are preserved so the
+    declared-unknown UBO is not silently dropped during conversion."""
+    ftm_id = make_ftm_relationship_id("unspecified", reason, subject_record_id)
+    proxy = model.make_entity("LegalEntity")
+    proxy.id = ftm_id
+    proxy.add("name", f"Unspecified beneficial owner ({reason})", quiet=True)
+    notes_parts = [f"BODS unspecifiedReason: {reason}"]
+    if description:
+        notes_parts.append(description)
+    proxy.add("notes", " — ".join(notes_parts), quiet=True)
+    return proxy, ftm_id

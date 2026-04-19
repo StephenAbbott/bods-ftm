@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from followthemoney import model
 
 from bods_ftm.config import PublisherConfig
@@ -26,7 +24,7 @@ class TestEntityMapper:
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
         assert stmt is not None
-        assert stmt["statementType"] == "entityStatement"
+        assert stmt["recordType"] == "entity"
 
     def test_entity_type_is_registered_entity(self):
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
@@ -36,13 +34,13 @@ class TestEntityMapper:
     def test_name_is_mapped(self):
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
-        names = [n["fullName"] for n in stmt["recordDetails"]["names"]]
-        assert "Test Company Ltd" in names
+        # Canonical 0.4: `name` is a single string.
+        assert stmt["recordDetails"]["name"] == "Test Company Ltd"
 
     def test_jurisdiction_code_is_uppercased(self):
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
-        juris = stmt["recordDetails"].get("incorporatedInJurisdiction", {})
+        juris = stmt["recordDetails"].get("jurisdiction", {})
         assert juris.get("code") == "GB"
 
     def test_registration_number_in_identifiers(self):
@@ -73,8 +71,16 @@ class TestEntityMapper:
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
         assert "publicationDetails" in stmt
-        assert stmt["publicationDetails"]["bodsVersion"] == "0.4.0"
+        assert stmt["publicationDetails"]["bodsVersion"] == "0.4"
         assert stmt["publicationDetails"]["publisher"]["name"] == "Test Publisher"
+
+    def test_record_id_and_statement_id_present(self):
+        proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        assert stmt["recordId"]
+        assert stmt["statementId"]
+        assert stmt["recordType"] == "entity"
+        assert stmt["recordStatus"] == "new"
 
 
 class TestPersonMapper:
@@ -82,7 +88,7 @@ class TestPersonMapper:
         proxy = model.get_proxy(SAMPLE_FTM_PERSON)
         stmt = ftm_person_to_bods(proxy, CONFIG)
         assert stmt is not None
-        assert stmt["statementType"] == "personStatement"
+        assert stmt["recordType"] == "person"
 
     def test_name_is_mapped(self):
         proxy = model.get_proxy(SAMPLE_FTM_PERSON)
@@ -109,47 +115,34 @@ class TestPersonMapper:
 
 
 class TestRelationshipMapper:
+    def _registry(self):
+        return {
+            "ftm-company-001": "bods-entity-record-001",
+            "ftm-person-001": "bods-person-record-001",
+        }
+
     def test_converts_ownership(self):
-        ftm_to_bods = {
-            "ftm-company-001": "bods-entity-001",
-            "ftm-person-001": "bods-person-001",
-        }
         proxy = model.get_proxy(SAMPLE_FTM_OWNERSHIP)
-        stmt = ftm_relationship_to_bods(proxy, ftm_to_bods, CONFIG)
+        stmt = ftm_relationship_to_bods(proxy, self._registry(), CONFIG)
         assert stmt is not None
-        assert stmt["statementType"] == "ownershipOrControlStatement"
+        assert stmt["recordType"] == "relationship"
 
-    def test_subject_reference_is_asset(self):
-        ftm_to_bods = {
-            "ftm-company-001": "bods-entity-001",
-            "ftm-person-001": "bods-person-001",
-        }
+    def test_subject_is_asset_record_id_string(self):
+        """Canonical 0.4: subject is a string pointing at a recordId, not a
+        nested describedByEntityStatement wrapper."""
         proxy = model.get_proxy(SAMPLE_FTM_OWNERSHIP)
-        stmt = ftm_relationship_to_bods(proxy, ftm_to_bods, CONFIG)
-        subject = stmt["recordDetails"]["subject"]
-        assert subject.get("describedByEntityStatement") == "bods-entity-001"
+        stmt = ftm_relationship_to_bods(proxy, self._registry(), CONFIG)
+        assert stmt["recordDetails"]["subject"] == "bods-entity-record-001"
 
-    def test_interested_party_reference(self):
-        ftm_to_bods = {
-            "ftm-company-001": "bods-entity-001",
-            "ftm-person-001": "bods-person-001",
-        }
+    def test_interested_party_is_owner_record_id_string(self):
+        """Canonical 0.4: interestedParty is a string pointing at a recordId."""
         proxy = model.get_proxy(SAMPLE_FTM_OWNERSHIP)
-        stmt = ftm_relationship_to_bods(proxy, ftm_to_bods, CONFIG)
-        ip = stmt["recordDetails"]["interestedParty"]
-        # owner is a person but schema is Ownership so defaults to entity ref;
-        # FTMToBODSConverter refines this — here we test the raw mapper
-        assert "bods-person-001" in (
-            ip.get("describedByEntityStatement") or ip.get("describedByPersonStatement") or ""
-        )
+        stmt = ftm_relationship_to_bods(proxy, self._registry(), CONFIG)
+        assert stmt["recordDetails"]["interestedParty"] == "bods-person-record-001"
 
     def test_percentage_in_share(self):
-        ftm_to_bods = {
-            "ftm-company-001": "bods-entity-001",
-            "ftm-person-001": "bods-person-001",
-        }
         proxy = model.get_proxy(SAMPLE_FTM_OWNERSHIP)
-        stmt = ftm_relationship_to_bods(proxy, ftm_to_bods, CONFIG)
+        stmt = ftm_relationship_to_bods(proxy, self._registry(), CONFIG)
         interests = stmt["recordDetails"]["interests"]
         assert interests[0]["share"]["exact"] == 51.0
 
@@ -159,12 +152,8 @@ class TestRelationshipMapper:
         assert stmt is None
 
     def test_directorship_maps_to_board_member(self):
-        ftm_to_bods = {
-            "ftm-company-001": "bods-entity-001",
-            "ftm-person-001": "bods-person-001",
-        }
         proxy = model.get_proxy(SAMPLE_FTM_DIRECTORSHIP)
-        stmt = ftm_relationship_to_bods(proxy, ftm_to_bods, CONFIG)
+        stmt = ftm_relationship_to_bods(proxy, self._registry(), CONFIG)
         assert stmt is not None
         interests = stmt["recordDetails"]["interests"]
         assert interests[0]["type"] == "boardMember"
@@ -175,22 +164,28 @@ class TestFTMToBODSConverter:
         converter = FTMToBODSConverter(CONFIG)
         result = converter.convert(SAMPLE_FTM_DATASET)
         assert len(result) > 0
-        types = {s["statementType"] for s in result}
-        assert "entityStatement" in types
-        assert "personStatement" in types
-        assert "ownershipOrControlStatement" in types
+        types = {s["recordType"] for s in result}
+        assert "entity" in types
+        assert "person" in types
+        assert "relationship" in types
 
-    def test_person_interested_party_reference_is_refined(self):
-        """The converter should use describedByPersonStatement for Person owners."""
+    def test_interested_party_resolves_to_person_record_id(self):
+        """Pass 1 registers a Person recordId; pass 2 emits it as the
+        interestedParty string. No describedBy* wrapper is produced."""
         converter = FTMToBODSConverter(CONFIG)
         result = converter.convert(SAMPLE_FTM_DATASET)
-        ooc_stmts = [s for s in result if s["statementType"] == "ownershipOrControlStatement"]
-        # At least one OOC from ownership should have a person reference
-        person_refs = [
-            s for s in ooc_stmts
-            if "describedByPersonStatement" in s["recordDetails"]["interestedParty"]
-        ]
-        assert len(person_refs) > 0
+        persons = [s for s in result if s.get("recordType") == "person"]
+        assert persons
+        person_record_ids = {s["recordId"] for s in persons}
+        relationships = [s for s in result if s.get("recordType") == "relationship"]
+        interested_refs = {
+            s["recordDetails"]["interestedParty"] for s in relationships
+        }
+        assert interested_refs & person_record_ids, (
+            "At least one relationship's interestedParty must point at a "
+            "person record; got refs=%r persons=%r"
+            % (interested_refs, person_record_ids)
+        )
 
     def test_file_roundtrip(self, sample_ftm_file, tmp_path):
         output = tmp_path / "out.bods.json"

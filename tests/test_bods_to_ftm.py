@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from bods_ftm.bods_to_ftm.converter import BODSToFTMConverter
 from bods_ftm.bods_to_ftm.entity_mapper import entity_statement_to_ftm
 from bods_ftm.bods_to_ftm.person_mapper import person_statement_to_ftm
@@ -13,6 +11,14 @@ from tests.conftest import (
     SAMPLE_OOC_STATEMENT,
     SAMPLE_PERSON_STATEMENT,
 )
+
+
+# Canonical 0.4 uses recordId for identity; build an index the way the
+# converter does so the raw relationship mapper can resolve references.
+_RECORD_INDEX = {
+    SAMPLE_ENTITY_STATEMENT["recordId"]: SAMPLE_ENTITY_STATEMENT,
+    SAMPLE_PERSON_STATEMENT["recordId"]: SAMPLE_PERSON_STATEMENT,
+}
 
 
 class TestEntityMapper:
@@ -47,18 +53,19 @@ class TestEntityMapper:
         assert proxy is not None
         assert "1 Test Street" in list(proxy.get("address", quiet=True))
 
-    def test_uses_statement_id_as_ftm_id(self):
+    def test_uses_record_id_as_ftm_id(self):
+        """FTM identity comes from recordId (the stable BODS 0.4 identity),
+        not statementId (which changes per update)."""
         proxy = entity_statement_to_ftm(SAMPLE_ENTITY_STATEMENT)
         assert proxy is not None
-        # BODS statementId should be used directly as FTM ID
-        assert proxy.id == "test-entity-0001"
+        assert proxy.id == "test-entity-record-0001"
 
     def test_returns_none_for_nameless_entity(self):
         stmt = {
             **SAMPLE_ENTITY_STATEMENT,
             "recordDetails": {
                 **SAMPLE_ENTITY_STATEMENT["recordDetails"],
-                "names": [],
+                "name": "",
             },
         }
         proxy = entity_statement_to_ftm(stmt)
@@ -68,6 +75,7 @@ class TestEntityMapper:
         stmt = {
             **SAMPLE_ENTITY_STATEMENT,
             "statementId": "test-entity-legal",
+            "recordId": "test-entity-legal-record",
             "recordDetails": {
                 **SAMPLE_ENTITY_STATEMENT["recordDetails"],
                 "entityType": {"type": "legalEntity"},
@@ -81,6 +89,7 @@ class TestEntityMapper:
         stmt = {
             **SAMPLE_ENTITY_STATEMENT,
             "statementId": "test-entity-state",
+            "recordId": "test-entity-state-record",
             "recordDetails": {
                 **SAMPLE_ENTITY_STATEMENT["recordDetails"],
                 "entityType": {"type": "stateBody"},
@@ -108,10 +117,10 @@ class TestPersonMapper:
         assert proxy is not None
         assert proxy.first("birthDate") == "1980-06-15"
 
-    def test_uses_statement_id_as_ftm_id(self):
+    def test_uses_record_id_as_ftm_id(self):
         proxy = person_statement_to_ftm(SAMPLE_PERSON_STATEMENT)
         assert proxy is not None
-        assert proxy.id == "test-person-0001"
+        assert proxy.id == "test-person-record-0001"
 
     def test_returns_none_for_unknown_person_without_name(self):
         stmt = {
@@ -128,32 +137,33 @@ class TestPersonMapper:
 
 class TestRelationshipMapper:
     def test_converts_shareholding_to_ownership(self):
-        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, {})
+        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, _RECORD_INDEX)
         assert len(proxies) == 1
         assert proxies[0].schema.name == "Ownership"
 
     def test_maps_percentage(self):
-        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, {})
+        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, _RECORD_INDEX)
         assert proxies[0].first("percentage") == "51.0"
 
     def test_maps_owner_and_asset_ids(self):
-        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, {})
+        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, _RECORD_INDEX)
         proxy = proxies[0]
-        assert "test-person-0001" in list(proxy.get("owner", quiet=True))
-        assert "test-entity-0001" in list(proxy.get("asset", quiet=True))
+        assert "test-person-record-0001" in list(proxy.get("owner", quiet=True))
+        assert "test-entity-record-0001" in list(proxy.get("asset", quiet=True))
 
     def test_maps_direct_status(self):
-        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, {})
+        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, _RECORD_INDEX)
         assert proxies[0].first("status") == "direct"
 
     def test_beneficial_ownership_sets_summary(self):
-        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, {})
+        proxies = ooc_statement_to_ftm(SAMPLE_OOC_STATEMENT, _RECORD_INDEX)
         assert "beneficial" in (proxies[0].first("summary") or "")
 
     def test_multiple_interests_produce_multiple_proxies(self):
         stmt = {
             **SAMPLE_OOC_STATEMENT,
-            "statementId": "test-ooc-multi",
+            "statementId": "test-rel-stmt-multi",
+            "recordId": "test-rel-record-multi",
             "recordDetails": {
                 **SAMPLE_OOC_STATEMENT["recordDetails"],
                 "interests": [
@@ -162,30 +172,31 @@ class TestRelationshipMapper:
                 ],
             },
         }
-        proxies = ooc_statement_to_ftm(stmt, {})
+        proxies = ooc_statement_to_ftm(stmt, _RECORD_INDEX)
         assert len(proxies) == 2
 
     def test_board_member_maps_to_directorship(self):
         stmt = {
             **SAMPLE_OOC_STATEMENT,
-            "statementId": "test-ooc-board",
+            "statementId": "test-rel-stmt-board",
+            "recordId": "test-rel-record-board",
             "recordDetails": {
                 **SAMPLE_OOC_STATEMENT["recordDetails"],
                 "interests": [{"type": "boardMember"}],
             },
         }
-        proxies = ooc_statement_to_ftm(stmt, {})
+        proxies = ooc_statement_to_ftm(stmt, _RECORD_INDEX)
         assert proxies[0].schema.name == "Directorship"
 
-    def test_skips_statement_with_no_subject(self):
+    def test_skips_statement_with_unresolved_subject(self):
         stmt = {
             **SAMPLE_OOC_STATEMENT,
             "recordDetails": {
                 **SAMPLE_OOC_STATEMENT["recordDetails"],
-                "subject": {},
+                "subject": "nonexistent-record-id",
             },
         }
-        proxies = ooc_statement_to_ftm(stmt, {})
+        proxies = ooc_statement_to_ftm(stmt, _RECORD_INDEX)
         assert proxies == []
 
 

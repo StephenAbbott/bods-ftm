@@ -19,61 +19,59 @@ class BODSToFTMConverter:
         converter = BODSToFTMConverter()
         ftm_entities = converter.convert(bods_statements)
 
-    The converter performs two passes over the input:
+    Two passes:
 
-    1. Entity and person statements are converted first so that their FTM IDs
-       are available when resolving subject/interestedParty references in OOC
-       statements.
-    2. Ownership-or-control statements are then converted, resolving subject
-       and interestedParty references to the FTM IDs generated in pass 1.
+    1. ``recordType: entity`` and ``recordType: person`` records are converted
+       first. The latest statement per ``recordId`` wins so that a record
+       updated multiple times produces one FTM proxy.
+    2. ``recordType: relationship`` records are converted, resolving
+       ``subject`` and ``interestedParty`` recordId strings against the
+       record index built in pass 1.
     """
 
     def convert(self, bods_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Convert a list of BODS statements to a list of FTM entity dicts.
-
-        Returns serialised entity dicts suitable for writing as JSONL.
-        """
         return [proxy.to_dict() for proxy in self._iter_proxies(bods_data)]
 
     def _iter_proxies(
         self, bods_data: list[dict[str, Any]]
     ) -> Iterator[EntityProxy]:
-        """Yield FTM entity proxies from BODS statements."""
-        # Index all statements by statementId for reference resolution
-        statement_index: dict[str, dict[str, Any]] = {
-            s["statementId"]: s for s in bods_data if "statementId" in s
-        }
+        # Index by recordId. Last statement wins for any given recordId,
+        # matching BODS 0.4 semantics where later statements update earlier
+        # ones.
+        record_index: dict[str, dict[str, Any]] = {}
+        for s in bods_data:
+            record_id = s.get("recordId")
+            if record_id:
+                record_index[record_id] = s
 
-        # Pass 1: entities and persons
-        for statement in bods_data:
-            stmt_type = statement.get("statementType")
-            if stmt_type == "entityStatement":
+        emitted_records: set[str] = set()
+
+        # Pass 1: entities and persons (one FTM proxy per unique recordId)
+        for record_id, statement in record_index.items():
+            record_type = statement.get("recordType")
+            if record_type == "entity":
                 proxy = entity_statement_to_ftm(statement)
-                if proxy is not None:
-                    yield proxy
-            elif stmt_type == "personStatement":
+            elif record_type == "person":
                 proxy = person_statement_to_ftm(statement)
-                if proxy is not None:
-                    yield proxy
+            else:
+                continue
+            if proxy is not None:
+                emitted_records.add(record_id)
+                yield proxy
 
-        # Pass 2: ownership-or-control relationships
+        # Pass 2: relationships
         for statement in bods_data:
-            if statement.get("statementType") == "ownershipOrControlStatement":
-                # Skip component statements — they represent intermediate hops in
-                # an indirect chain.  The top-level statement (isComponent: False)
-                # already captures the full indirect relationship; emitting the
-                # components separately would produce duplicate edges in FTM graph
-                # tools.
-                if statement.get("recordDetails", {}).get("isComponent", False):
-                    continue
-                for proxy in ooc_statement_to_ftm(statement, statement_index):
-                    yield proxy
+            if statement.get("recordType") != "relationship":
+                continue
+            # Skip component statements — intermediate hops in indirect chains.
+            # The non-component top-level statement captures the full chain;
+            # emitting components separately produces duplicate FTM edges.
+            if statement.get("recordDetails", {}).get("isComponent", False):
+                continue
+            for proxy in ooc_statement_to_ftm(statement, record_index):
+                yield proxy
 
     def convert_file(self, input_path: str | Path, output_path: str | Path) -> int:
-        """Read BODS JSON from input_path, write FTM JSONL to output_path.
-
-        Returns the number of FTM entities written.
-        """
         input_path = Path(input_path)
         output_path = Path(output_path)
 

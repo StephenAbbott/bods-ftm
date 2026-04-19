@@ -2,15 +2,11 @@ from __future__ import annotations
 
 """Round-trip tests: BODS→FTM→BODS and FTM→BODS→FTM.
 
-These tests verify that key properties survive the conversion cycle.
-Some information loss is expected (documented in the README); these tests
-focus on the semantically important fields: names, identifiers,
-ownership percentages, and statement type structure.
+These verify that key properties survive the conversion cycle. Some
+information loss is expected (documented in the README); these tests focus
+on the semantically important fields: names, identifiers, ownership
+percentages, and statement envelope structure.
 """
-
-import pytest
-
-from followthemoney import model
 
 from bods_ftm.bods_to_ftm.converter import BODSToFTMConverter
 from bods_ftm.config import PublisherConfig
@@ -30,33 +26,29 @@ class TestBODSToFTMToBODS:
 
     def test_entity_count_preserved(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        entity_stmts = [s for s in result if s["statementType"] == "entityStatement"]
+        entity_stmts = [s for s in result if s.get("recordType") == "entity"]
         original_entity_stmts = [
-            s for s in SAMPLE_BODS_DATASET if s["statementType"] == "entityStatement"
+            s for s in SAMPLE_BODS_DATASET if s.get("recordType") == "entity"
         ]
         assert len(entity_stmts) == len(original_entity_stmts)
 
     def test_person_count_preserved(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        person_stmts = [s for s in result if s["statementType"] == "personStatement"]
+        person_stmts = [s for s in result if s.get("recordType") == "person"]
         original_person_stmts = [
-            s for s in SAMPLE_BODS_DATASET if s["statementType"] == "personStatement"
+            s for s in SAMPLE_BODS_DATASET if s.get("recordType") == "person"
         ]
         assert len(person_stmts) == len(original_person_stmts)
 
     def test_entity_name_survives(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        entity_stmts = [s for s in result if s["statementType"] == "entityStatement"]
-        names = {
-            n["fullName"]
-            for s in entity_stmts
-            for n in s["recordDetails"].get("names", [])
-        }
+        entity_stmts = [s for s in result if s.get("recordType") == "entity"]
+        names = {s["recordDetails"].get("name") for s in entity_stmts}
         assert "Test Company Ltd" in names
 
     def test_person_name_survives(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        person_stmts = [s for s in result if s["statementType"] == "personStatement"]
+        person_stmts = [s for s in result if s.get("recordType") == "person"]
         names = {
             n["fullName"]
             for s in person_stmts
@@ -66,12 +58,10 @@ class TestBODSToFTMToBODS:
 
     def test_ownership_percentage_survives(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        ooc_stmts = [
-            s for s in result if s["statementType"] == "ownershipOrControlStatement"
-        ]
+        rel_stmts = [s for s in result if s.get("recordType") == "relationship"]
         percentages = {
             i["share"]["exact"]
-            for s in ooc_stmts
+            for s in rel_stmts
             for i in s["recordDetails"].get("interests", [])
             if "share" in i
         }
@@ -79,9 +69,9 @@ class TestBODSToFTMToBODS:
 
     def test_jurisdiction_survives(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
-        entity_stmts = [s for s in result if s["statementType"] == "entityStatement"]
+        entity_stmts = [s for s in result if s.get("recordType") == "entity"]
         jurisdictions = {
-            s["recordDetails"].get("incorporatedInJurisdiction", {}).get("code")
+            s["recordDetails"].get("jurisdiction", {}).get("code")
             for s in entity_stmts
         }
         assert "GB" in jurisdictions
@@ -89,7 +79,7 @@ class TestBODSToFTMToBODS:
     def test_bods_version_is_0_4(self):
         result = self._roundtrip(SAMPLE_BODS_DATASET)
         for stmt in result:
-            assert stmt["publicationDetails"]["bodsVersion"] == "0.4.0"
+            assert stmt["publicationDetails"]["bodsVersion"] == "0.4"
 
 
 class TestFTMToBODSToFTM:

@@ -12,5 +12,5 @@ class PublisherConfig:
     publisher_name: str = "bods-ftm converter"
     publisher_uri: str | None = None
     license_url: str = "https://creativecommons.org/publicdomain/zero/1.0/"
-    bods_version: str = "0.4.0"
+    bods_version: str = "0.4"
     publication_date: str = field(default_factory=today_iso)

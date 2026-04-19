@@ -7,7 +7,7 @@ from followthemoney.proxy import EntityProxy
 from bods_ftm.config import PublisherConfig
 from bods_ftm.ftm_to_bods.identifier_mapper import extract_person_identifiers
 from bods_ftm.utils.dates import normalise_date
-from bods_ftm.utils.ids import ftm_id_to_bods_statement_id
+from bods_ftm.utils.ids import ftm_id_to_bods_record_id, ftm_id_to_bods_statement_id
 from bods_ftm.utils.statements import person_statement, publication_details
 
 
@@ -24,6 +24,7 @@ def ftm_person_to_bods(
         return None
 
     statement_id = ftm_id_to_bods_statement_id(proxy.id)
+    record_id = ftm_id_to_bods_record_id(proxy.id)
     pub_details = publication_details(
         publisher_name=config.publisher_name,
         publisher_uri=config.publisher_uri,
@@ -89,4 +90,6 @@ def ftm_person_to_bods(
 
     statement_date = proxy.first("modifiedAt", quiet=True) or config.publication_date
 
-    return person_statement(statement_id, record_details, pub_details, statement_date)
+    return person_statement(
+        statement_id, record_id, record_details, pub_details, statement_date
+    )

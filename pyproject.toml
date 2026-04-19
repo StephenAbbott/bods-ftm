@@ -21,6 +21,7 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    "bods-fixtures @ git+https://github.com/StephenAbbott/bods-fixtures.git@v0.1.0",
 ]
 
 [project.scripts]

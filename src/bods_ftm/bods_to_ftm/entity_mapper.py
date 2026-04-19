@@ -7,7 +7,7 @@ from followthemoney.proxy import EntityProxy
 
 from bods_ftm.bods_to_ftm.identifier_mapper import bods_scheme_to_ftm_property
 from bods_ftm.utils.dates import normalise_date
-from bods_ftm.utils.ids import bods_statement_id_to_ftm_id
+from bods_ftm.utils.ids import bods_record_id_to_ftm_id
 
 # Maps BODS entityType.type values to FTM schema names
 ENTITY_TYPE_TO_FTM_SCHEMA: dict[str, str] = {
@@ -25,8 +25,12 @@ def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
     """Convert a BODS v0.4 entity statement to an FTM entity proxy.
 
     Returns None if the statement lacks enough data to produce a meaningful
-    FTM entity.
+    FTM entity (no recordId, no name).
     """
+    record_id = statement.get("recordId")
+    if not record_id:
+        return None
+
     details = statement.get("recordDetails", {})
 
     entity_type_obj = details.get("entityType", {})
@@ -36,19 +40,27 @@ def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
     ftm_schema = ENTITY_TYPE_TO_FTM_SCHEMA.get(entity_type_str or "", "LegalEntity")
 
     proxy: EntityProxy = model.make_entity(ftm_schema)
-    proxy.id = bods_statement_id_to_ftm_id(statement["statementId"])
+    proxy.id = bods_record_id_to_ftm_id(record_id)
 
-    # Names
-    for name_obj in details.get("names", []):
-        full_name = name_obj.get("fullName")
-        if full_name:
-            proxy.add("name", full_name, quiet=True)
+    # Primary name (canonical 0.4 uses singular `name`).
+    name = details.get("name")
+    if isinstance(name, str) and name:
+        proxy.add("name", name, quiet=True)
+
+    # Alternate names (0.4) — each is a string in the array, optionally an object.
+    for alt in details.get("alternateNames", []):
+        if isinstance(alt, str) and alt:
+            proxy.add("alias", alt, quiet=True)
+        elif isinstance(alt, dict):
+            full = alt.get("fullName")
+            if full:
+                proxy.add("alias", full, quiet=True)
 
     if not proxy.has("name"):
         return None
 
-    # Jurisdiction / incorporation
-    jurisdiction = details.get("incorporatedInJurisdiction", {})
+    # Jurisdiction (canonical 0.4 field name)
+    jurisdiction = details.get("jurisdiction", {})
     if isinstance(jurisdiction, dict):
         juris_code = jurisdiction.get("code")
         if juris_code:
@@ -89,7 +101,7 @@ def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
         if ticker:
             proxy.add("ticker", ticker, quiet=True)
 
-    # Source provenance
+    # Provenance
     statement_date = statement.get("statementDate")
     if statement_date:
         proxy.add("modifiedAt", statement_date, quiet=True)

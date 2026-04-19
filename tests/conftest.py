@@ -7,27 +7,30 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
-# Sample BODS v0.4 data
+# Sample BODS v0.4 data — canonical recordType / recordDetails envelope.
 # ---------------------------------------------------------------------------
 
 SAMPLE_ENTITY_STATEMENT = {
-    "statementId": "test-entity-0001",
-    "statementType": "entityStatement",
+    "statementId": "test-entity-stmt-0001",
+    "declarationSubject": "test-entity-record-0001",
     "statementDate": "2024-01-15",
     "publicationDetails": {
         "publicationDate": "2024-01-15",
-        "bodsVersion": "0.4.0",
+        "bodsVersion": "0.4",
         "license": "https://creativecommons.org/publicdomain/zero/1.0/",
         "publisher": {"name": "Test Publisher", "uri": "https://test.example.com"},
     },
+    "recordId": "test-entity-record-0001",
+    "recordStatus": "new",
+    "recordType": "entity",
     "recordDetails": {
         "entityType": {"type": "registeredEntity"},
-        "names": [{"fullName": "Test Company Ltd"}],
+        "name": "Test Company Ltd",
         "identifiers": [
             {"id": "11223344", "scheme": "GB-COH"},
             {"id": "213800TEST0000001A80", "scheme": "XI-LEI"},
         ],
-        "incorporatedInJurisdiction": {"code": "GB", "name": "United Kingdom"},
+        "jurisdiction": {"code": "GB", "name": "United Kingdom"},
         "foundingDate": "2010-01-01",
         "addresses": [
             {"type": "registered", "address": "1 Test Street", "country": {"code": "GB"}}
@@ -37,15 +40,18 @@ SAMPLE_ENTITY_STATEMENT = {
 }
 
 SAMPLE_PERSON_STATEMENT = {
-    "statementId": "test-person-0001",
-    "statementType": "personStatement",
+    "statementId": "test-person-stmt-0001",
+    "declarationSubject": "test-person-record-0001",
     "statementDate": "2024-01-15",
     "publicationDetails": {
         "publicationDate": "2024-01-15",
-        "bodsVersion": "0.4.0",
+        "bodsVersion": "0.4",
         "license": "https://creativecommons.org/publicdomain/zero/1.0/",
         "publisher": {"name": "Test Publisher"},
     },
+    "recordId": "test-person-record-0001",
+    "recordStatus": "new",
+    "recordType": "person",
     "recordDetails": {
         "personType": "knownPerson",
         "names": [{"fullName": "Test Person"}],
@@ -56,18 +62,21 @@ SAMPLE_PERSON_STATEMENT = {
 }
 
 SAMPLE_OOC_STATEMENT = {
-    "statementId": "test-ooc-0001",
-    "statementType": "ownershipOrControlStatement",
+    "statementId": "test-rel-stmt-0001",
+    "declarationSubject": "test-rel-record-0001",
     "statementDate": "2024-01-15",
     "publicationDetails": {
         "publicationDate": "2024-01-15",
-        "bodsVersion": "0.4.0",
+        "bodsVersion": "0.4",
         "license": "https://creativecommons.org/publicdomain/zero/1.0/",
         "publisher": {"name": "Test Publisher"},
     },
+    "recordId": "test-rel-record-0001",
+    "recordStatus": "new",
+    "recordType": "relationship",
     "recordDetails": {
-        "subject": {"describedByEntityStatement": "test-entity-0001"},
-        "interestedParty": {"describedByPersonStatement": "test-person-0001"},
+        "subject": "test-entity-record-0001",
+        "interestedParty": "test-person-record-0001",
         "interests": [
             {
                 "type": "shareholding",
@@ -78,7 +87,6 @@ SAMPLE_OOC_STATEMENT = {
             }
         ],
         "isComponent": False,
-        "componentStatementIDs": [],
     },
 }
 

@@ -14,7 +14,6 @@ from bods_ftm.ftm_to_bods.relationship_mapper import (
     FTM_SCHEMA_TO_INTEREST_TYPE,
     ftm_relationship_to_bods,
 )
-from bods_ftm.utils.ids import ftm_id_to_bods_statement_id
 
 # FTM schemas that represent entities (nodes in the graph)
 _ENTITY_SCHEMAS = frozenset(("Company", "Organization", "LegalEntity", "PublicBody"))
@@ -26,28 +25,20 @@ _RELATIONSHIP_SCHEMAS = frozenset(FTM_SCHEMA_TO_INTEREST_TYPE.keys())
 class FTMToBODSConverter:
     """Convert a stream of FollowTheMoney entities to BODS v0.4 statements.
 
-    Usage::
+    Two passes:
 
-        config = PublisherConfig(publisher_name="My Publisher")
-        converter = FTMToBODSConverter(config)
-        bods_statements = converter.convert(ftm_entities)
-
-    The converter performs two passes:
-
-    1. All Company/Organization/Person entities are converted to BODS entity
-       and person statements.  A registry of FTM ID → BODS statementId is
-       built for use in pass 2.
-    2. Ownership, Directorship, and related relationship entities are
-       converted to BODS ownership-or-control statements, with
-       subject/interestedParty references resolved via the registry.
+    1. Company/Organization/Person proxies are converted to BODS entity and
+       person records. A registry of FTM ID → BODS recordId is built for use
+       in pass 2 — recordId is the stable identity that subject and
+       interestedParty references resolve against in canonical 0.4.
+    2. Ownership/Directorship/UnknownLink proxies become BODS relationship
+       records, with subject/interestedParty emitted as recordId strings.
     """
 
     def __init__(self, config: PublisherConfig | None = None) -> None:
         self.config = config or PublisherConfig()
-        # Maps FTM entity ID → BODS statementId
-        self._ftm_id_to_bods_id: dict[str, str] = {}
-        # Tracks which BODS statementIds represent person statements
-        self._person_statement_ids: set[str] = set()
+        # Maps FTM entity ID → BODS recordId
+        self._ftm_id_to_record_id: dict[str, str] = {}
 
     def convert(self, ftm_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Convert a list of FTM entity dicts to a list of BODS statement dicts."""
@@ -67,45 +58,19 @@ class FTMToBODSConverter:
                 bods_stmt = ftm_person_to_bods(proxy, self.config)
 
             if bods_stmt is not None:
-                bods_id = bods_stmt["statementId"]
-                self._ftm_id_to_bods_id[proxy.id] = bods_id
-                if proxy.schema.name in _PERSON_SCHEMAS:
-                    self._person_statement_ids.add(bods_id)
+                self._ftm_id_to_record_id[proxy.id] = bods_stmt["recordId"]
                 statements.append(bods_stmt)
 
         # Pass 2: relationships
         for proxy in proxies:
             if proxy.schema.name in _RELATIONSHIP_SCHEMAS:
-                bods_stmt = self._convert_relationship(proxy)
+                bods_stmt = ftm_relationship_to_bods(
+                    proxy, self._ftm_id_to_record_id, self.config
+                )
                 if bods_stmt is not None:
                     statements.append(bods_stmt)
 
         return statements
-
-    def _convert_relationship(
-        self, proxy: EntityProxy
-    ) -> dict[str, Any] | None:
-        """Convert a relationship proxy, injecting the person-vs-entity hint."""
-        bods_stmt = ftm_relationship_to_bods(
-            proxy, self._ftm_id_to_bods_id, self.config
-        )
-        if bods_stmt is None:
-            return None
-
-        # Refine interestedParty reference: if the owner resolves to a person
-        # statement, use describedByPersonStatement; else describedByEntityStatement
-        record = bods_stmt.get("recordDetails", {})
-        interested_party = record.get("interestedParty", {})
-        if isinstance(interested_party, dict):
-            current_ref = interested_party.get(
-                "describedByEntityStatement"
-            ) or interested_party.get("describedByPersonStatement")
-            if current_ref and current_ref in self._person_statement_ids:
-                record["interestedParty"] = {"describedByPersonStatement": current_ref}
-            elif current_ref:
-                record["interestedParty"] = {"describedByEntityStatement": current_ref}
-
-        return bods_stmt
 
     def convert_file(self, input_path: str | Path, output_path: str | Path) -> int:
         """Read FTM JSONL from input_path, write BODS JSON array to output_path.
