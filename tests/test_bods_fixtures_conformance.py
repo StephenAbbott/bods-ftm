@@ -7,49 +7,50 @@ either in the converter or in our understanding of the spec.
 
 The pack is the source of truth: see
 https://github.com/StephenAbbott/bods-fixtures
+
+The ``bods_fixture`` parameter is auto-parametrized by the
+pytest-bods-fixtures plugin over every case in the pack. Tests that need
+a specific case use ``load(name)`` directly.
 """
 
 from __future__ import annotations
 
 import pytest
-from bods_fixtures import list_cases, load
+from bods_fixtures import Fixture, load
 
 from bods_ftm.bods_to_ftm.converter import BODSToFTMConverter
 from bods_ftm.config import PublisherConfig
 from bods_ftm.ftm_to_bods.converter import FTMToBODSConverter
 
-ALL_CASES = list_cases()
 CONFIG = PublisherConfig(publisher_name="bods-fixtures conformance")
 
 
-@pytest.mark.parametrize("name", ALL_CASES)
-def test_bods_to_ftm_does_not_raise(name):
+def test_bods_to_ftm_does_not_raise(bods_fixture: Fixture) -> None:
     """Every fixture must be convertible without exceptions."""
-    fixture = load(name)
-    BODSToFTMConverter().convert(fixture.statements)
+    BODSToFTMConverter().convert(bods_fixture.statements)
 
 
-@pytest.mark.parametrize("name", ALL_CASES)
-def test_bods_to_ftm_emits_at_least_one_entity_when_fixture_has_records(name):
+def test_bods_to_ftm_emits_at_least_one_entity_when_fixture_has_records(
+    bods_fixture: Fixture,
+) -> None:
     """If a fixture contains entity or person records, the converter must emit
     at least one corresponding FTM proxy."""
-    fixture = load(name)
     has_subjects = bool(
-        fixture.by_record_type("entity") or fixture.by_record_type("person")
+        bods_fixture.by_record_type("entity") or bods_fixture.by_record_type("person")
     )
     if not has_subjects:
         pytest.skip("fixture contains no entity/person records")
-    result = BODSToFTMConverter().convert(fixture.statements)
+    result = BODSToFTMConverter().convert(bods_fixture.statements)
     assert result, (
-        f"{name}: fixture has {len(fixture.by_record_type('entity'))} entity and "
-        f"{len(fixture.by_record_type('person'))} person records, but the "
-        f"BODS→FTM converter produced 0 FTM proxies. Likely cause: converter "
-        f"is dispatching on the BODS v0.3 `statementType` field rather than "
-        f"the canonical v0.4 `recordType`."
+        f"{bods_fixture.name}: fixture has {len(bods_fixture.by_record_type('entity'))} "
+        f"entity and {len(bods_fixture.by_record_type('person'))} person records, "
+        f"but the BODS→FTM converter produced 0 FTM proxies. Likely cause: "
+        f"converter is dispatching on the BODS v0.3 `statementType` field rather "
+        f"than the canonical v0.4 `recordType`."
     )
 
 
-def test_direct_ownership_produces_company_person_and_ownership():
+def test_direct_ownership_produces_company_person_and_ownership() -> None:
     """The baseline fixture must produce one Company, one Person, and an
     Ownership relation linking them."""
     fixture = load("core/01-direct-ownership")
@@ -62,12 +63,11 @@ def test_direct_ownership_produces_company_person_and_ownership():
     )
 
 
-def test_anonymous_person_preserves_unspecified_reason():
+def test_anonymous_person_preserves_unspecified_reason() -> None:
     """The declared-unknown UBO fixture must not be silently dropped — the
     inline interestedParty reason code must reach FTM in some mapped form."""
     fixture = load("edge-cases/11-anonymous-person")
-    bods_stmts = fixture.statements
-    result = BODSToFTMConverter().convert(bods_stmts)
+    result = BODSToFTMConverter().convert(fixture.statements)
     serialised = repr(result)
     assert "subjectUnableToConfirmOrIdentifyBeneficialOwner" in serialised, (
         "The unspecifiedReason code must appear somewhere in the FTM output "
@@ -76,7 +76,7 @@ def test_anonymous_person_preserves_unspecified_reason():
     )
 
 
-def test_circular_ownership_terminates_and_emits_both_edges():
+def test_circular_ownership_terminates_and_emits_both_edges() -> None:
     """A↔B cycle must produce both Ownership edges, not loop forever or
     deduplicate one direction away."""
     fixture = load("edge-cases/10-circular-ownership")
@@ -87,17 +87,17 @@ def test_circular_ownership_terminates_and_emits_both_edges():
     )
 
 
-@pytest.mark.parametrize("name", ALL_CASES)
-def test_roundtrip_bods_to_ftm_to_bods_preserves_record_count(name):
+def test_roundtrip_bods_to_ftm_to_bods_preserves_record_count(
+    bods_fixture: Fixture,
+) -> None:
     """A round trip must preserve the count of entity + person records.
     Relationships may legitimately not round-trip 1:1 (FTM Ownership/Directorship
     semantics differ from BODS interests), but entities and persons must."""
-    fixture = load(name)
-    ftm = BODSToFTMConverter().convert(fixture.statements)
+    ftm = BODSToFTMConverter().convert(bods_fixture.statements)
     back = FTMToBODSConverter(CONFIG).convert(ftm)
 
-    original_entity_count = len(fixture.by_record_type("entity"))
-    original_person_count = len(fixture.by_record_type("person"))
+    original_entity_count = len(bods_fixture.by_record_type("entity"))
+    original_person_count = len(bods_fixture.by_record_type("person"))
 
     back_entity_count = sum(1 for s in back if s.get("recordType") == "entity")
     back_person_count = sum(1 for s in back if s.get("recordType") == "person")
@@ -106,8 +106,10 @@ def test_roundtrip_bods_to_ftm_to_bods_preserves_record_count(name):
     # declared-unknown UBO signal (inline unspecifiedReason). Round-tripping
     # those produces extra entity records — expected, not a regression.
     assert back_entity_count >= original_entity_count, (
-        f"{name}: entity count dropped {original_entity_count} → {back_entity_count}"
+        f"{bods_fixture.name}: entity count dropped "
+        f"{original_entity_count} → {back_entity_count}"
     )
     assert back_person_count == original_person_count, (
-        f"{name}: person count {original_person_count} → {back_person_count}"
+        f"{bods_fixture.name}: person count "
+        f"{original_person_count} → {back_person_count}"
     )
