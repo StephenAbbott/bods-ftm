@@ -160,7 +160,13 @@ src/bods_ftm/
 pytest
 ```
 
-The test suite has 60 tests covering unit-level mappers, the full converter pipeline, and bidirectional round-trip properties (BODS→FTM→BODS and FTM→BODS→FTM).
+The test suite covers unit-level mappers, the full converter pipeline, and bidirectional round-trip properties (BODS→FTM→BODS and FTM→BODS→FTM).
+
+### Conformance against the shared BODS v0.4 fixture pack
+
+`tests/test_bods_fixtures_conformance.py` runs the bidirectional converter against every case in the canonical [**bods-v04-fixtures**](https://pypi.org/project/bods-v04-fixtures/) pack via the [**pytest-bods-v04-fixtures**](https://pypi.org/project/pytest-bods-v04-fixtures/) plugin. Tests are parametrized by fixture name so a failure like `[edge-cases/11-anonymous-person]` points straight at the offending case.
+
+Conformance checks include: every canonical fixture maps without exception; entity/person counts round-trip; declared-unknown UBOs (inline `unspecifiedReason`) reach the FTM output rather than being silently dropped; and circular ownership produces both mirrored edges.
 
 ## Related work
 
