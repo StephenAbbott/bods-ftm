@@ -2,6 +2,8 @@
 
 Bidirectional converter between [Beneficial Ownership Data Standard (BODS) v0.4](https://standard.openownership.org/en/0.4.0/) and the [FollowTheMoney (FtM)](https://followthemoney.tech/) data model used by [OpenSanctions](https://www.opensanctions.org/) and [OpenAleph](https://openaleph.org/).
 
+Part of the [BODS Interoperability Toolkit](https://github.com/StephenAbbott/bods-interoperability-toolkit).
+
 ## Motivation
 
 [OpenSanctions](https://www.opensanctions.org/), [OpenAleph](https://openaleph.org/) and the broader investigative data ecosystem publish a large number of datasets in FollowTheMoney format — including company registries, ownership structures, sanctions lists and politically exposed person (PEP) data. 
