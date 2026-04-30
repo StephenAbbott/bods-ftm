@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pycountry
 from followthemoney.proxy import EntityProxy
 
 from bods_ftm.config import PublisherConfig
@@ -34,17 +35,16 @@ def ftm_person_to_bods(
 
     names = [{"fullName": n} for n in proxy.get("name", quiet=True) if n]
 
-    # Nationalities
+    # Nationalities — FTM normalises to 2-letter ISO codes via EntityProxy,
+    # so a pycountry lookup always succeeds for valid values. We emit both
+    # name and code so the BODS output is self-describing.
     nationalities: list[dict[str, str]] = []
-    for code in proxy.get("nationality", quiet=True):
-        if code:
-            nationalities.append({"code": code.upper()})
-    # Also check citizenship
-    for code in proxy.get("citizenship", quiet=True):
-        if code:
-            entry = {"code": code.upper()}
-            if entry not in nationalities:
-                nationalities.append(entry)
+    for code in list(proxy.get("nationality", quiet=True)) + list(proxy.get("citizenship", quiet=True)):
+        if not code:
+            continue
+        entry = _resolve_nationality(code)
+        if entry not in nationalities:
+            nationalities.append(entry)
 
     # Birth date
     birth_date = normalise_date(proxy.first("birthDate", quiet=True))
@@ -93,3 +93,18 @@ def ftm_person_to_bods(
     return person_statement(
         statement_id, record_id, record_details, pub_details, statement_date
     )
+
+
+def _resolve_nationality(code: str) -> dict[str, str]:
+    """Resolve an FTM nationality/citizenship code to a BODS nationality entry.
+
+    FTM normalises nationality to 2-letter ISO codes, so pycountry lookups
+    succeed for all well-formed values. Falls back to ``{"code": upper}``
+    for any code that isn't in pycountry (e.g. custom or legacy values).
+    """
+    upper = code.strip().upper()
+    try:
+        country = pycountry.countries.lookup(upper)
+        return {"name": country.name, "code": country.alpha_2}
+    except LookupError:
+        return {"code": upper}

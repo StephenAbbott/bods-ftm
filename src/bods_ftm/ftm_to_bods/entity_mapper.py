@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pycountry
 from followthemoney.proxy import EntityProxy
 
 from bods_ftm.config import PublisherConfig
@@ -49,11 +50,19 @@ def ftm_entity_to_bods(
     primary_name = all_names[0]
     alternate_names = all_names[1:] + [a for a in proxy.get("alias", quiet=True) if a]
 
-    # Jurisdiction
+    # Jurisdiction — resolve the FTM code (always a 2-letter ISO code after
+    # EntityProxy normalisation) to a full country name so the BODS
+    # jurisdiction block carries both a human-readable name and the code.
     jurisdiction_code = proxy.first("jurisdiction", quiet=True)
     jurisdiction: dict[str, str] | None = None
     if jurisdiction_code:
-        jurisdiction = {"code": jurisdiction_code.upper()}
+        upper = jurisdiction_code.upper()
+        try:
+            country = pycountry.countries.lookup(upper)
+            jurisdiction = {"code": country.alpha_2, "name": country.name}
+        except LookupError:
+            # Unknown code — preserve as-is so data isn't silently lost.
+            jurisdiction = {"code": upper}
 
     founding = normalise_date(proxy.first("incorporationDate", quiet=True))
     dissolution = normalise_date(proxy.first("dissolutionDate", quiet=True))

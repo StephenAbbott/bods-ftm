@@ -5,6 +5,7 @@ from followthemoney import model
 from bods_ftm.config import PublisherConfig
 from bods_ftm.ftm_to_bods.converter import FTMToBODSConverter
 from bods_ftm.ftm_to_bods.entity_mapper import ftm_entity_to_bods
+from bods_ftm.ftm_to_bods.identifier_mapper import _resolve_scheme
 from bods_ftm.ftm_to_bods.person_mapper import ftm_person_to_bods
 from bods_ftm.ftm_to_bods.relationship_mapper import ftm_relationship_to_bods
 
@@ -37,17 +38,36 @@ class TestEntityMapper:
         # Canonical 0.4: `name` is a single string.
         assert stmt["recordDetails"]["name"] == "Test Company Ltd"
 
-    def test_jurisdiction_code_is_uppercased(self):
+    def test_jurisdiction_has_code_and_name(self):
+        """Jurisdiction block must carry both code and human-readable name."""
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
         juris = stmt["recordDetails"].get("jurisdiction", {})
         assert juris.get("code") == "GB"
+        assert juris.get("name") == "United Kingdom"
+
+    def test_jurisdiction_lowercase_input_resolved(self):
+        """FTM 'gb' (lowercase) must produce code='GB', name='United Kingdom'."""
+        data = {**SAMPLE_FTM_COMPANY, "properties": {**SAMPLE_FTM_COMPANY["properties"], "jurisdiction": ["gb"]}}
+        proxy = model.get_proxy(data)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        juris = stmt["recordDetails"].get("jurisdiction", {})
+        assert juris.get("code") == "GB"
+        assert juris.get("name") == "United Kingdom"
 
     def test_registration_number_in_identifiers(self):
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
         stmt = ftm_entity_to_bods(proxy, CONFIG)
         ids = {i["id"] for i in stmt["recordDetails"].get("identifiers", [])}
         assert "11223344" in ids
+
+    def test_registration_number_uses_gb_coh_for_gb_jurisdiction(self):
+        """GB registrationNumber must use 'GB-COH', not 'misc-regnum'."""
+        proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        schemes = {i["scheme"] for i in stmt["recordDetails"].get("identifiers", [])}
+        assert "GB-COH" in schemes
+        assert "misc-regnum" not in schemes
 
     def test_founding_date_mapped(self):
         proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
@@ -96,11 +116,13 @@ class TestPersonMapper:
         names = [n["fullName"] for n in stmt["recordDetails"]["names"]]
         assert "Test Person" in names
 
-    def test_nationality_is_uppercased(self):
+    def test_nationality_has_code_and_name(self):
+        """Nationality entries must carry both code and human-readable name."""
         proxy = model.get_proxy(SAMPLE_FTM_PERSON)
         stmt = ftm_person_to_bods(proxy, CONFIG)
-        nats = [n["code"] for n in stmt["recordDetails"].get("nationalities", [])]
-        assert "GB" in nats
+        nats = stmt["recordDetails"].get("nationalities", [])
+        assert any(n.get("code") == "GB" for n in nats)
+        assert any(n.get("name") == "United Kingdom" for n in nats)
 
     def test_birth_date_mapped(self):
         proxy = model.get_proxy(SAMPLE_FTM_PERSON)
@@ -112,6 +134,32 @@ class TestPersonMapper:
         proxy = model.get_proxy(data)
         stmt = ftm_person_to_bods(proxy, CONFIG)
         assert stmt is None
+
+
+class TestIdentifierSchemeResolution:
+    """Unit tests for _resolve_scheme covering the three tiers of resolution."""
+
+    def test_gb_registration_number_uses_gb_coh(self):
+        assert _resolve_scheme("registrationNumber", "misc-regnum", "GB") == "GB-COH"
+
+    def test_us_registration_number_uses_us_ein(self):
+        assert _resolve_scheme("registrationNumber", "misc-regnum", "US") == "US-EIN"
+
+    def test_unknown_jurisdiction_uses_reg_alpha2(self):
+        # KE (Kenya) is not in the hardcoded dict — should fall back to REG-KE.
+        assert _resolve_scheme("registrationNumber", "misc-regnum", "KE") == "REG-KE"
+
+    def test_lowercase_jurisdiction_resolved(self):
+        # FTM sometimes stores lowercase; should still resolve.
+        assert _resolve_scheme("registrationNumber", "misc-regnum", "ke") == "REG-KE"
+
+    def test_no_jurisdiction_returns_default(self):
+        assert _resolve_scheme("registrationNumber", "misc-regnum", None) == "misc-regnum"
+
+    def test_non_regnum_property_unaffected(self):
+        # taxNumber, leiCode etc. must not be touched by jurisdiction logic.
+        assert _resolve_scheme("leiCode", "XI-LEI", "GB") == "XI-LEI"
+        assert _resolve_scheme("taxNumber", "misc-tax", "US") == "misc-tax"
 
 
 class TestRelationshipMapper:

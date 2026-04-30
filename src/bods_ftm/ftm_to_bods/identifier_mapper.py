@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pycountry
 from followthemoney.proxy import EntityProxy
 
 # FTM Company/Organization identifier properties that should become
@@ -7,7 +8,7 @@ from followthemoney.proxy import EntityProxy
 # The scheme code is indicative — callers should override using
 # jurisdiction context when it is available.
 FTM_IDENTIFIER_PROPERTIES: dict[str, str] = {
-    "registrationNumber": "misc-regnum",
+    "registrationNumber": "misc-regnum",  # overridden by _resolve_scheme
     "taxNumber": "misc-tax",
     "leiCode": "XI-LEI",
     "isin": "misc-isin",
@@ -22,6 +23,29 @@ FTM_PERSON_IDENTIFIER_PROPERTIES: dict[str, str] = {
     "passportNumber": "misc-passport",
     "taxNumber": "misc-tax",
     "socialSecurityNumber": "misc-ssn",
+}
+
+# Well-known jurisdictions that have a dedicated org-id.guide scheme code for
+# their company register. For all other jurisdictions we fall back to
+# "REG-{alpha2}" (e.g. "REG-SE") rather than the generic "misc-regnum" so
+# that reconcilers can bridge on the same identifier across sources.
+_KNOWN_REGNUM_SCHEMES: dict[str, str] = {
+    "GB": "GB-COH",
+    "US": "US-EIN",
+    "DE": "DE-HRB",
+    "FR": "FR-RCS",
+    "NL": "NL-KVK",
+    "BE": "BE-BCE_KBO",
+    "SE": "SE-BV",
+    "DK": "DK-CVR",
+    "NO": "NO-BRREG",
+    "AU": "AU-ABN",
+    "CA": "CA-BN",
+    "IN": "IN-MCA",
+    "SG": "SG-ACRA",
+    "UA": "UA-EDR",
+    "BR": "BR-CNPJ",
+    "ZA": "ZA-CIPC",
 }
 
 
@@ -60,32 +84,33 @@ def _resolve_scheme(
     default_scheme: str,
     jurisdiction_code: str | None,
 ) -> str:
-    """Attempt to resolve a jurisdiction-specific scheme code."""
-    if not jurisdiction_code:
+    """Resolve a jurisdiction-specific scheme code for a registration number.
+
+    For ``registrationNumber``:
+    - If the jurisdiction matches a well-known registry with a dedicated
+      org-id.guide scheme code (e.g. GB → GB-COH), use that.
+    - Otherwise, if the jurisdiction is a valid ISO 3166-1 alpha-2 code,
+      use ``REG-{alpha2}`` so reconcilers can bridge across sources on the
+      same identifier without resorting to the opaque ``misc-regnum`` fallback.
+    - Only fall back to the default scheme (``misc-regnum``) when no
+      jurisdiction is known at all.
+
+    All other FTM properties use their fixed scheme codes unchanged.
+    """
+    if ftm_prop != "registrationNumber" or not jurisdiction_code:
         return default_scheme
 
     juris = jurisdiction_code.upper()
 
-    # Well-known jurisdiction → scheme mappings for registration numbers
-    _juris_regnum_schemes = {
-        "GB": "GB-COH",
-        "US": "US-EIN",
-        "DE": "DE-HRB",
-        "FR": "FR-RCS",
-        "NL": "NL-KVK",
-        "BE": "BE-BCE_KBO",
-        "SE": "SE-BV",
-        "DK": "DK-CVR",
-        "NO": "NO-BRREG",
-        "AU": "AU-ABN",
-        "CA": "CA-BN",
-        "IN": "IN-MCA",
-        "SG": "SG-ACRA",
-        "UA": "UA-EDR",
-        "BR": "BR-CNPJ",
-        "ZA": "ZA-CIPC",
-    }
-    if ftm_prop == "registrationNumber" and juris in _juris_regnum_schemes:
-        return _juris_regnum_schemes[juris]
+    # 1. Well-known registry with dedicated org-id.guide scheme.
+    if juris in _KNOWN_REGNUM_SCHEMES:
+        return _KNOWN_REGNUM_SCHEMES[juris]
+
+    # 2. Any other ISO 3166-1 jurisdiction → REG-{alpha2}.
+    try:
+        alpha2 = pycountry.countries.lookup(juris).alpha_2
+        return f"REG-{alpha2}"
+    except LookupError:
+        pass
 
     return default_scheme
