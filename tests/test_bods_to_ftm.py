@@ -216,3 +216,118 @@ class TestBODSToFTMConverter:
         count = converter.convert_file(sample_bods_file, output)
         assert count > 0
         assert output.exists()
+
+
+class TestOpenCorporatesIdentifier:
+    def test_opencorporates_scheme_sets_oc_url(self):
+        """BODS OPENCORPORATES identifier -> FTM opencorporatesUrl property."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-oc-stmt-001",
+            "recordId": "test-oc-record-001",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {
+                        "id": "se/556056-6258",
+                        "scheme": "OPENCORPORATES",
+                        "schemeName": "OpenCorporates company identifier",
+                        "uri": "https://opencorporates.com/companies/se/556056-6258",
+                    }
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        oc_urls = list(proxy.get("opencorporatesUrl", quiet=True))
+        assert "https://opencorporates.com/companies/se/556056-6258" in oc_urls
+
+    def test_opencorporates_constructs_url_from_id_when_no_uri(self):
+        """When the uri field is absent, the URL is constructed from id."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-oc-stmt-002",
+            "recordId": "test-oc-record-002",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {"id": "gb/00102498", "scheme": "OPENCORPORATES"},
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        oc_urls = list(proxy.get("opencorporatesUrl", quiet=True))
+        assert "https://opencorporates.com/companies/gb/00102498" in oc_urls
+
+    def test_opencorporates_does_not_pollute_registration_number(self):
+        """OPENCORPORATES id must not be written to registrationNumber."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-oc-stmt-003",
+            "recordId": "test-oc-record-003",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {"id": "se/556056-6258", "scheme": "OPENCORPORATES"},
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        reg_nums = list(proxy.get("registrationNumber", quiet=True))
+        assert "se/556056-6258" not in reg_nums
+
+    def test_gleif_qcc_scheme_skipped(self):
+        """GLEIF-QCC has no FtM equivalent; must not pollute registrationNumber."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-qcc-stmt-001",
+            "recordId": "test-qcc-record-001",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {"id": "QCC-EXAMPLE-001", "scheme": "GLEIF-QCC"},
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        reg_nums = list(proxy.get("registrationNumber", quiet=True))
+        assert "QCC-EXAMPLE-001" not in reg_nums
+
+    def test_iso_10383_mic_scheme_skipped(self):
+        """ISO-10383 MIC has no FtM equivalent; must not pollute registrationNumber."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-mic-stmt-001",
+            "recordId": "test-mic-record-001",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {"id": "XSTO", "scheme": "ISO-10383"},
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        reg_nums = list(proxy.get("registrationNumber", quiet=True))
+        assert "XSTO" not in reg_nums
+
+    def test_iso_9362_bic_scheme_skipped(self):
+        """ISO-9362 BIC has no FtM equivalent; must not pollute registrationNumber."""
+        stmt = {
+            **SAMPLE_ENTITY_STATEMENT,
+            "statementId": "test-bic-stmt-001",
+            "recordId": "test-bic-record-001",
+            "recordDetails": {
+                **SAMPLE_ENTITY_STATEMENT["recordDetails"],
+                "identifiers": [
+                    {"id": "ESSESESS", "scheme": "ISO-9362"},
+                ],
+            },
+        }
+        proxy = entity_statement_to_ftm(stmt)
+        assert proxy is not None
+        reg_nums = list(proxy.get("registrationNumber", quiet=True))
+        assert "ESSESESS" not in reg_nums

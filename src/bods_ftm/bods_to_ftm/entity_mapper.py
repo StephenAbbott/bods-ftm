@@ -5,7 +5,10 @@ from typing import Any
 from followthemoney import model
 from followthemoney.proxy import EntityProxy
 
-from bods_ftm.bods_to_ftm.identifier_mapper import bods_scheme_to_ftm_property
+from bods_ftm.bods_to_ftm.identifier_mapper import (
+    BODS_SCHEMES_NO_FTM_PROPERTY,
+    bods_scheme_to_ftm_property,
+)
 from bods_ftm.utils.dates import normalise_date
 from bods_ftm.utils.ids import bods_record_id_to_ftm_id
 
@@ -19,6 +22,9 @@ ENTITY_TYPE_TO_FTM_SCHEMA: dict[str, str] = {
     "state": "PublicBody",
     "stateBody": "PublicBody",
 }
+
+
+_OC_COMPANIES_BASE = "https://opencorporates.com/companies/"
 
 
 def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:

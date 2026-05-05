@@ -241,3 +241,77 @@ class TestFTMToBODSConverter:
         count = converter.convert_file(sample_ftm_file, output)
         assert count > 0
         assert output.exists()
+
+
+class TestOpenCorporatesUrlIdentifier:
+    def test_oc_url_produces_opencorporates_scheme(self):
+        """FTM opencorporatesUrl -> BODS OPENCORPORATES scheme identifier."""
+        data = {
+            **SAMPLE_FTM_COMPANY,
+            "id": "ftm-se-001",
+            "properties": {
+                **SAMPLE_FTM_COMPANY["properties"],
+                "opencorporatesUrl": ["https://opencorporates.com/companies/se/556056-6258"],
+            },
+        }
+        proxy = model.get_proxy(data)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        assert stmt is not None
+        ids = stmt["recordDetails"].get("identifiers", [])
+        oc_ids = [i for i in ids if i.get("scheme") == "OPENCORPORATES"]
+        assert len(oc_ids) == 1
+        assert oc_ids[0]["id"] == "se/556056-6258"
+
+    def test_oc_url_preserves_uri_field(self):
+        oc_url = "https://opencorporates.com/companies/se/556056-6258"
+        data = {
+            **SAMPLE_FTM_COMPANY,
+            "id": "ftm-se-002",
+            "properties": {
+                **SAMPLE_FTM_COMPANY["properties"],
+                "opencorporatesUrl": [oc_url],
+            },
+        }
+        proxy = model.get_proxy(data)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        ids = stmt["recordDetails"].get("identifiers", [])
+        oc_ids = [i for i in ids if i.get("scheme") == "OPENCORPORATES"]
+        assert oc_ids[0].get("uri") == oc_url
+
+    def test_oc_url_scheme_name_set(self):
+        data = {
+            **SAMPLE_FTM_COMPANY,
+            "id": "ftm-se-003",
+            "properties": {
+                **SAMPLE_FTM_COMPANY["properties"],
+                "opencorporatesUrl": ["https://opencorporates.com/companies/gb/00102498"],
+            },
+        }
+        proxy = model.get_proxy(data)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        ids = stmt["recordDetails"].get("identifiers", [])
+        oc_ids = [i for i in ids if i.get("scheme") == "OPENCORPORATES"]
+        assert oc_ids[0].get("schemeName") == "OpenCorporates company identifier"
+
+    def test_malformed_oc_url_skipped(self):
+        """A URL that doesn't contain the OC companies marker is not surfaced."""
+        data = {
+            **SAMPLE_FTM_COMPANY,
+            "id": "ftm-bad-oc",
+            "properties": {
+                **SAMPLE_FTM_COMPANY["properties"],
+                "opencorporatesUrl": ["https://example.com/not-oc"],
+            },
+        }
+        proxy = model.get_proxy(data)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        ids = stmt["recordDetails"].get("identifiers", [])
+        oc_ids = [i for i in ids if i.get("scheme") == "OPENCORPORATES"]
+        assert oc_ids == []
+
+    def test_no_oc_url_produces_no_opencorporates_identifier(self):
+        proxy = model.get_proxy(SAMPLE_FTM_COMPANY)
+        stmt = ftm_entity_to_bods(proxy, CONFIG)
+        ids = stmt["recordDetails"].get("identifiers", [])
+        oc_ids = [i for i in ids if i.get("scheme") == "OPENCORPORATES"]
+        assert oc_ids == []

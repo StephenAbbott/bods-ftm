@@ -13,7 +13,7 @@ authors = [
 ]
 dependencies = [
     "click>=8.1",
-    "followthemoney>=3.5",
+    "followthemoney>=3.5,<4",
     "python-dateutil>=2.8",
 ]
 

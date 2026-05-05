@@ -49,6 +49,9 @@ _KNOWN_REGNUM_SCHEMES: dict[str, str] = {
 }
 
 
+_OC_URL_MARKER = "opencorporates.com/companies/"
+
+
 def extract_entity_identifiers(
     proxy: EntityProxy,
     jurisdiction_code: str | None = None,
@@ -63,6 +66,21 @@ def extract_entity_identifiers(
             scheme = _resolve_scheme(ftm_prop, default_scheme, jurisdiction_code)
             identifiers.append({"id": value, "scheme": scheme})
 
+    # ``opencorporatesUrl`` is a url-type FTM property (not in the identifier
+    # property table above).  Extract the company path from the URL and surface
+    # it as an OPENCORPORATES scheme identifier so roundtrips are lossless.
+    for oc_url in proxy.get("opencorporatesUrl", quiet=True):
+        if not oc_url or _OC_URL_MARKER not in oc_url:
+            continue
+        path = oc_url.split(_OC_URL_MARKER, 1)[1].rstrip("/")
+        if path:
+            identifiers.append({
+                "id": path,
+                "scheme": "OPENCORPORATES",
+                "schemeName": "OpenCorporates company identifier",
+                "uri": oc_url,
+            })
+
     return identifiers
 
 
@@ -75,6 +93,21 @@ def extract_person_identifiers(proxy: EntityProxy) -> list[dict[str, str]]:
             if not value:
                 continue
             identifiers.append({"id": value, "scheme": default_scheme})
+
+    # ``opencorporatesUrl`` is a url-type FTM property (not in the identifier
+    # property table above).  Extract the company path from the URL and surface
+    # it as an OPENCORPORATES scheme identifier so roundtrips are lossless.
+    for oc_url in proxy.get("opencorporatesUrl", quiet=True):
+        if not oc_url or _OC_URL_MARKER not in oc_url:
+            continue
+        path = oc_url.split(_OC_URL_MARKER, 1)[1].rstrip("/")
+        if path:
+            identifiers.append({
+                "id": path,
+                "scheme": "OPENCORPORATES",
+                "schemeName": "OpenCorporates company identifier",
+                "uri": oc_url,
+            })
 
     return identifiers
 

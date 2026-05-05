@@ -61,11 +61,32 @@ FTM_PROPERTY_TO_SCHEME: dict[str, str] = {
 }
 
 
-def bods_scheme_to_ftm_property(scheme: str) -> str:
+# BODS schemes that are handled specially in entity_mapper (not via a simple
+# FTM property assignment) or have no FTM equivalent.  Callers should check
+# for these before calling bods_scheme_to_ftm_property.
+#
+# OPENCORPORATES: the ``id`` is a company path (e.g. "se/556056-6258");
+#   entity_mapper constructs the full URL and sets ``opencorporatesUrl``.
+# GLEIF-QCC, ISO-10383, ISO-9362: GLEIF LEI Mapping identifiers for which
+#   the FtM LegalEntity schema has no corresponding property; they are
+#   preserved in BODS output but not round-trippable through FtM.
+BODS_SCHEMES_NO_FTM_PROPERTY: frozenset[str] = frozenset({
+    "OPENCORPORATES",
+    "GLEIF-QCC",
+    "ISO-10383",
+    "ISO-9362",
+})
+
+
+def bods_scheme_to_ftm_property(scheme: str) -> str | None:
     """Return the FTM property name for a BODS identifier scheme code.
 
-    Falls back to registrationNumber for unknown schemes.
+    Returns ``None`` for schemes in ``BODS_SCHEMES_NO_FTM_PROPERTY`` (either
+    handled specially by the caller or having no FtM equivalent).
+    Falls back to ``registrationNumber`` for all other unknown schemes.
     """
+    if scheme in BODS_SCHEMES_NO_FTM_PROPERTY:
+        return None
     return SCHEME_TO_FTM_PROPERTY.get(scheme, "registrationNumber")
 
 
