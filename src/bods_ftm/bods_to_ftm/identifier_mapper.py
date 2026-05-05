@@ -67,12 +67,12 @@ FTM_PROPERTY_TO_SCHEME: dict[str, str] = {
 #
 # OPENCORPORATES: the ``id`` is a company path (e.g. "se/556056-6258");
 #   entity_mapper constructs the full URL and sets ``opencorporatesUrl``.
-# GLEIF-QCC, ISO-10383, ISO-9362: GLEIF LEI Mapping identifiers for which
+# QCC Code, ISO-10383, ISO-9362: GLEIF LEI Mapping identifiers for which
 #   the FtM LegalEntity schema has no corresponding property; they are
 #   preserved in BODS output but not round-trippable through FtM.
 BODS_SCHEMES_NO_FTM_PROPERTY: frozenset[str] = frozenset({
     "OPENCORPORATES",
-    "GLEIF-QCC",
+    "QCC Code",
     "ISO-10383",
     "ISO-9362",
 })

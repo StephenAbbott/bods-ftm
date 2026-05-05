@@ -279,7 +279,7 @@ class TestOpenCorporatesIdentifier:
         assert "se/556056-6258" not in reg_nums
 
     def test_gleif_qcc_scheme_skipped(self):
-        """GLEIF-QCC has no FtM equivalent; must not pollute registrationNumber."""
+        """QCC Code (Qichacha GEI) has no FtM equivalent; must not pollute registrationNumber."""
         stmt = {
             **SAMPLE_ENTITY_STATEMENT,
             "statementId": "test-qcc-stmt-001",
@@ -287,7 +287,7 @@ class TestOpenCorporatesIdentifier:
             "recordDetails": {
                 **SAMPLE_ENTITY_STATEMENT["recordDetails"],
                 "identifiers": [
-                    {"id": "QCC-EXAMPLE-001", "scheme": "GLEIF-QCC"},
+                    {"id": "QCC-EXAMPLE-001", "scheme": "QCC Code"},
                 ],
             },
         }
