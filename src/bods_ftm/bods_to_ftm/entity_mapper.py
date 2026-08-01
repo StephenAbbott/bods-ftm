@@ -85,8 +85,16 @@ def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
     for id_obj in details.get("identifiers", []):
         id_value = id_obj.get("id")
         scheme = id_obj.get("scheme", "")
-        if id_value:
-            ftm_prop = bods_scheme_to_ftm_property(scheme)
+        if not id_value:
+            continue
+        if scheme == "OPENCORPORATES":
+            # The id is a company path (e.g. "se/556056-6258"); prefer the
+            # explicit uri when present, otherwise construct the URL.
+            oc_url = id_obj.get("uri") or _OC_COMPANIES_BASE + id_value.lstrip("/")
+            proxy.add("opencorporatesUrl", oc_url, quiet=True)
+            continue
+        ftm_prop = bods_scheme_to_ftm_property(scheme)
+        if ftm_prop:
             proxy.add(ftm_prop, id_value, quiet=True)
 
     # Addresses
