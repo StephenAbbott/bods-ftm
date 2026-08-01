@@ -6,14 +6,20 @@ build-backend = "setuptools.build_meta"
 name = "bods-ftm"
 version = "0.1.0"
 description = "Bidirectional converter between Beneficial Ownership Data Standard (BODS) v0.4 and the FollowTheMoney data model used by OpenSanctions and OpenAleph"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Stephen Abbott Pugh"},
 ]
 dependencies = [
     "click>=8.1",
-    "followthemoney>=3.5,<4",
+    # >=4.8 is the first FtM release on the Rust-cored rigour 2.x line
+    # (4.0-4.7 pin rigour <2). All FtM 4.x require normality 3.x, which
+    # hard-depends on pyicu (source-only build: needs g++/libicu-dev/pkg-config).
+    "followthemoney>=4.8,<5",
+    # Used directly by ftm_to_bods (country/jurisdiction lookups); previously
+    # only present by accident of the local environment - declare it explicitly.
+    "pycountry>=22.3",
     "python-dateutil>=2.8",
 ]
 
