@@ -9,44 +9,125 @@ from bods_ftm.utils.dates import normalise_date
 from bods_ftm.utils.ids import bods_record_id_to_ftm_id, make_ftm_relationship_id
 
 # FollowTheMoney schema to use for each BODS interest type.
-# Directorship is used for roles that represent control through a position;
-# Ownership is used for economic/voting interests; UnknownLink for the rest.
+#
+# FtM 4.11 added a ``Control`` schema (controller -> controlled, with a free
+# ``controlType``) for control that is not ownership. The split:
+#
+# * ``Ownership`` - economic interests, which carry a percentage.
+# * ``Control``   - control without ownership: board appointment, rights under
+#   the articles or a contract, a legal framework, trust roles, nominees.
+#   ``votingRights`` is Control *unless* the interest states a share, in which
+#   case it stays Ownership so the percentage survives (Control has no
+#   ``percentage`` property) - the way OpenSanctions models voting stakes.
+# * ``Directorship`` - positions held: board member, chair, senior managing
+#   official.
+# * ``UnknownLink`` - unknown or unpublished interests.
 INTEREST_TYPE_TO_FTM_SCHEMA: dict[str, str] = {
     "shareholding": "Ownership",
-    "votingRights": "Ownership",
-    "appointmentOfBoard": "Directorship",
+    "votingRights": "Control",  # Ownership when a share is stated
+    "appointmentOfBoard": "Control",
     "seniorManagingOfficial": "Directorship",
     "boardMember": "Directorship",
     "boardChair": "Directorship",
-    "otherInfluenceOrControl": "Ownership",
-    "settlor": "Ownership",
-    "trustee": "Directorship",
-    "protector": "Directorship",
-    "beneficiaryOfLegalArrangement": "Ownership",
+    "otherInfluenceOrControl": "Control",
+    "settlor": "Control",
+    "trustee": "Control",
+    "protector": "Control",
+    "beneficiaryOfLegalArrangement": "Control",
     "rightsToSurplusAssetsOnDissolution": "Ownership",
     "rightsToProfitOrIncome": "Ownership",
-    "rightsGrantedByContract": "Ownership",
-    "conditionalRightsGrantedByContract": "Ownership",
-    "controlViaCompanyRulesOrArticles": "Ownership",
-    "controlByLegalFramework": "Ownership",
+    "rightsGrantedByContract": "Control",
+    "conditionalRightsGrantedByContract": "Control",
+    "controlViaCompanyRulesOrArticles": "Control",
+    "controlByLegalFramework": "Control",
     "enjoymentAndUseOfAssets": "Ownership",
     "rightToProfitOrIncomeFromAssets": "Ownership",
-    "nominee": "Directorship",
-    "nominator": "Directorship",
+    "nominee": "Control",
+    "nominator": "Control",
     "unknownInterest": "UnknownLink",
     "unpublishedInterest": "UnknownLink",
 }
 
+# ``Control.controlType`` for each BODS interest type routed to Control. A type
+# with no entry gets no controlType rather than a near miss: the BODS interest
+# type is always kept in ``role``. ``controlByLegalFramework`` is ``state`` only
+# when the interested party is a state or state body (see
+# ``_control_type``); otherwise it is left unset - a legal framework is not a
+# contract.
+INTEREST_TYPE_TO_CONTROL_TYPE: dict[str, str] = {
+    "votingRights": "voting",
+    "appointmentOfBoard": "appointment",
+    "settlor": "trust",
+    "trustee": "trust",
+    "protector": "trust",
+    "beneficiaryOfLegalArrangement": "trust",
+    "rightsGrantedByContract": "contractual",
+    "conditionalRightsGrantedByContract": "contractual",
+    "controlViaCompanyRulesOrArticles": "contractual",
+    "nominee": "nominee",
+    "nominator": "nominee",
+}
+
+_STATE_ENTITY_TYPES = frozenset({"state", "stateBody"})
+
 _OWNER_PROP = {
     "Ownership": "owner",
     "Directorship": "director",
+    "Control": "controller",
     "UnknownLink": "subject",
 }
 _ASSET_PROP = {
     "Ownership": "asset",
     "Directorship": "organization",
+    "Control": "controlled",
     "UnknownLink": "object",
 }
+
+
+def ftm_schema_for_interest(interest: dict[str, Any]) -> str:
+    """The FtM schema a BODS interest becomes."""
+    interest_type = interest.get("type", "unknownInterest")
+    schema = INTEREST_TYPE_TO_FTM_SCHEMA.get(interest_type, "Ownership")
+    if interest_type == "votingRights" and _share_value(interest) is not None:
+        return "Ownership"
+    return schema
+
+
+def _share_value(interest: dict[str, Any]) -> Any:
+    share = interest.get("share")
+    if not isinstance(share, dict):
+        return None
+    for key in ("exact", "minimum", "maximum"):
+        if share.get(key) is not None:
+            return share[key]
+    return None
+
+
+def _share_text(share: dict[str, Any]) -> str | None:
+    """A BODS share in words, for schemas with no percentage property."""
+    if share.get("exact") is not None:
+        return f"Share: {share['exact']}%"
+    low = share.get("minimum")
+    high = share.get("maximum")
+    if low is not None and high is not None:
+        return f"Share: {low}-{high}%"
+    if low is not None:
+        return f"Share: at least {low}%"
+    if high is not None:
+        return f"Share: up to {high}%"
+    return None
+
+
+def _control_type(
+    interest_type: str, interested_party: dict[str, Any] | None
+) -> str | None:
+    if interest_type == "controlByLegalFramework":
+        if interested_party is None:
+            return None
+        entity_type = interested_party.get("recordDetails", {}).get("entityType")
+        type_str = entity_type.get("type") if isinstance(entity_type, dict) else entity_type
+        return "state" if type_str in _STATE_ENTITY_TYPES else None
+    return INTEREST_TYPE_TO_CONTROL_TYPE.get(interest_type)
 
 
 def ooc_statement_to_ftm(
@@ -103,7 +184,7 @@ def ooc_statement_to_ftm(
 
     for idx, interest in enumerate(interests):
         interest_type = interest.get("type", "unknownInterest")
-        ftm_schema = INTEREST_TYPE_TO_FTM_SCHEMA.get(interest_type, "Ownership")
+        ftm_schema = ftm_schema_for_interest(interest)
 
         rel_id = make_ftm_relationship_id(
             statement["statementId"], str(idx), interest_type
@@ -119,8 +200,22 @@ def ooc_statement_to_ftm(
         proxy.add(asset_prop, asset_ftm_id, quiet=True)
         proxy.add("role", interest_type, quiet=True)
 
+        if ftm_schema == "Control":
+            control_type = _control_type(
+                interest_type,
+                record_index.get(interested_party)
+                if isinstance(interested_party, str)
+                else None,
+            )
+            if control_type:
+                proxy.add("controlType", control_type, quiet=True)
+
         share = interest.get("share", {})
-        if isinstance(share, dict):
+        if isinstance(share, dict) and ftm_schema != "Ownership":
+            share_text = _share_text(share)
+            if share_text:
+                proxy.add("description", share_text, quiet=True)
+        elif isinstance(share, dict):
             exact = share.get("exact")
             if exact is not None:
                 proxy.add("percentage", str(exact), quiet=True)

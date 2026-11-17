@@ -15,6 +15,9 @@ FTM_IDENTIFIER_PROPERTIES: dict[str, str] = {
     "dunsCode": "misc-duns",
     "innCode": "RU-INN",
     "ogrnCode": "RU-OGRN",
+    # FtM 4.11.3: cikCode on LegalEntity, irsCode (US EIN) on Organization.
+    "cikCode": "US-SEC-CIK",
+    "irsCode": "US-EIN",
 }
 
 # FTM Person identifier properties
@@ -23,15 +26,17 @@ FTM_PERSON_IDENTIFIER_PROPERTIES: dict[str, str] = {
     "passportNumber": "misc-passport",
     "taxNumber": "misc-tax",
     "socialSecurityNumber": "misc-ssn",
+    "cikCode": "US-SEC-CIK",
 }
 
 # Well-known jurisdictions that have a dedicated org-id.guide scheme code for
-# their company register. For all other jurisdictions we fall back to
+# their company register. The US has no national register: a US
+# registrationNumber is a state filing number, never an EIN (EINs are read
+# from irsCode), so it falls through to REG-US. For all other jurisdictions we fall back to
 # "REG-{alpha2}" (e.g. "REG-SE") rather than the generic "misc-regnum" so
 # that reconcilers can bridge on the same identifier across sources.
 _KNOWN_REGNUM_SCHEMES: dict[str, str] = {
     "GB": "GB-COH",
-    "US": "US-EIN",
     "DE": "DE-HRB",
     "FR": "FR-RCS",
     "NL": "NL-KVK",

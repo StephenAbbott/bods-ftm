@@ -5,6 +5,7 @@ from typing import Any
 from followthemoney import model
 from followthemoney.proxy import EntityProxy
 
+from bods_ftm.bods_to_ftm.identifier_mapper import add_identifier
 from bods_ftm.utils.dates import normalise_date
 from bods_ftm.utils.ids import bods_record_id_to_ftm_id
 
@@ -52,7 +53,7 @@ def person_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
         if not id_value:
             continue
         ftm_prop = _person_scheme_to_ftm_property(scheme)
-        proxy.add(ftm_prop, id_value, quiet=True)
+        add_identifier(proxy, ftm_prop, id_value)
 
     for addr_obj in details.get("addresses", []):
         address_str = addr_obj.get("address")
@@ -86,6 +87,10 @@ def person_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
 
 def _person_scheme_to_ftm_property(scheme: str) -> str:
     scheme_upper = scheme.upper()
+    if scheme_upper == "US-SEC-CIK":
+        # FtM 4.11.3 moved cikCode to LegalEntity, which Person extends:
+        # the SEC assigns CIKs to individual filers too.
+        return "cikCode"
     if "PASSPORT" in scheme_upper:
         return "passportNumber"
     if "NIN" in scheme_upper or "SSN" in scheme_upper or "NATIONAL" in scheme_upper:

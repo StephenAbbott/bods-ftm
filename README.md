@@ -21,9 +21,14 @@ Earlier work ([opensanctions/bods-ftm](https://github.com/opensanctions/bods-ftm
 | `entityStatement` (`arrangement`, `anonymousEntity`, `unknownEntity`) | `LegalEntity` |
 | `entityStatement` (`state`, `stateBody`) | `PublicBody` |
 | `personStatement` | `Person` |
-| `ownershipOrControlStatement` with shareholding / voting rights interest | `Ownership` |
-| `ownershipOrControlStatement` with board / directorship interest | `Directorship` |
+| `ownershipOrControlStatement` with an economic interest (shareholding, rights to profit or surplus assets, use of assets), or voting rights with a stated share | `Ownership` |
+| `ownershipOrControlStatement` with a control interest (board appointment, articles, contract, legal framework, trust roles, nominee, other influence, voting rights with no share) | `Control` (FtM 4.11), with `controlType` where one fits |
+| `ownershipOrControlStatement` with a board member, chair or senior managing official interest | `Directorship` |
 | `ownershipOrControlStatement` with unknown interest | `UnknownLink` |
+
+`Control.controlType` is `voting`, `appointment`, `contractual`, `trust` or `nominee`; `controlByLegalFramework` is `state` only when the interested party is a `state` or `stateBody`, and `otherInfluenceOrControl` gets none. The BODS interest type is always kept in `role`, so it round-trips.
+
+Identifiers: `US-EIN` → `irsCode` and `US-SEC-CIK` → `cikCode` (FtM 4.11.3), falling back to `taxNumber` / `registrationNumber` where the schema lacks the property or FtM refuses the value.
 
 Full interest-type mapping is in [`src/bods_ftm/bods_to_ftm/relationship_mapper.py`](src/bods_ftm/bods_to_ftm/relationship_mapper.py).
 
@@ -96,7 +101,7 @@ converter.convert_file("input.ftm.jsonl", "output.bods.json")
 
 1. **First pass — entities and persons.** Each `entityStatement` is converted to a typed FTM node (`Company`, `Organization`, etc.) using the `entityType.type` value. Each `personStatement` becomes an FTM `Person`. The BODS `statementId` is used directly as the FTM entity ID, preserving the reference.
 
-2. **Second pass — relationships.** Each `ownershipOrControlStatement` is converted to one FTM edge entity per entry in its `interests[]` array. The `interests[].type` value determines whether the edge is `Ownership`, `Directorship`, or `UnknownLink`. The subject/interestedParty BODS IDs resolve to the FTM IDs from pass 1.
+2. **Second pass — relationships.** Each `ownershipOrControlStatement` is converted to one FTM edge entity per entry in its `interests[]` array. The `interests[].type` value determines whether the edge is `Ownership`, `Control`, `Directorship`, or `UnknownLink`. The subject/interestedParty BODS IDs resolve to the FTM IDs from pass 1.
 
 3. **Indirect chains.** `isComponent: true` statements (which represent intermediate hops in an indirect ownership chain) are skipped. The top-level statement that holds `componentStatementIDs` already captures the full indirect relationship; emitting the component hops separately would produce duplicate edges in FTM graph tools.
 
@@ -104,7 +109,7 @@ converter.convert_file("input.ftm.jsonl", "output.bods.json")
 
 1. **First pass — nodes.** `Company`, `Organization`, `LegalEntity`, and `PublicBody` entities become BODS `entityStatement`s. `Person` entities become BODS `personStatement`s. FTM entity IDs are mapped to BODS `statementId`s via a deterministic UUID5 hash, so the same FTM input always produces the same BODS IDs.
 
-2. **Second pass — edges.** `Ownership`, `Directorship`, and `UnknownLink` entities become BODS `ownershipOrControlStatement`s. The FTM `role` property is inspected to refine the BODS `interests[].type` (e.g. `"board member"` → `boardMember`). Whether the `interestedParty` reference uses `describedByPersonStatement` or `describedByEntityStatement` is determined automatically from the type of entity produced in pass 1.
+2. **Second pass — edges.** `Ownership`, `Control`, `Directorship`, `UnknownLink`, `Membership`, `Employment` and `Representation` entities become BODS `ownershipOrControlStatement`s. The FTM `role` property is inspected to refine the BODS `interests[].type` (e.g. `"board member"` → `boardMember`). Whether the `interestedParty` reference uses `describedByPersonStatement` or `describedByEntityStatement` is determined automatically from the type of entity produced in pass 1.
 
 ### Identifier mapping
 
@@ -121,6 +126,7 @@ Some BODS concepts have no direct FTM equivalent and are handled as described be
 | `replacesStatements` (temporal versioning) | Dropped — no FTM equivalent |
 | `publicationDetails` | Publisher name/URI mapped to FTM `publisher` / `sourceUrl` |
 | `politicalExposure` PEP reason | Mapped to FTM `position` property |
+| `share` on an interest that becomes `Control`, `Directorship` or `UnknownLink` | Kept as text in `description` (`Share: 25-50%`); only `Ownership` has a `percentage` |
 | `interestedParty.unspecified` | Represented as a synthetic `LegalEntity` FTM node with the unspecified reason in its ID |
 
 Some FTM concepts are similarly lossy in the BODS direction.
@@ -128,7 +134,8 @@ Some FTM concepts are similarly lossy in the BODS direction.
 | FTM concept | Behaviour in BODS output |
 |---|---|
 | Multiple `name` values | All mapped to BODS `names[]` array |
-| `role` on Ownership/Directorship | Inspected to refine `interests[].type`; values not in the mapping table default to `shareholding` / `boardMember` |
+| `role` on Ownership/Control/Directorship | A BODS interest type, or a known role word, sets `interests[].type`; otherwise `Control.controlType` does (`voting` → `votingRights`, `appointment` → `appointmentOfBoard`, `contractual` → `rightsGrantedByContract`, `nominee` → `nominee`, `state` → `controlByLegalFramework`); otherwise the schema default (`shareholding` / `otherInfluenceOrControl` / `boardMember`). `controlType: trust` alone does not say which trust role, so it stays `otherInfluenceOrControl` |
+| `Control.legalBasis` | `interests[].details` |
 | `datasets` / `referredTo` | Dropped |
 | `Employment`, `Membership`, `Representation` | Converted to OOC with `seniorManagingOfficial` / `otherInfluenceOrControl` interest type |
 
@@ -140,7 +147,7 @@ src/bods_ftm/
 │   ├── converter.py          # BODSToFTMConverter — two-pass orchestrator
 │   ├── entity_mapper.py      # entityStatement → FTM Company/Organization/...
 │   ├── person_mapper.py      # personStatement → FTM Person
-│   ├── relationship_mapper.py# ownershipOrControlStatement → FTM Ownership/Directorship/UnknownLink
+│   ├── relationship_mapper.py# ownershipOrControlStatement → FTM Ownership/Control/Directorship/UnknownLink
 │   └── identifier_mapper.py  # BODS scheme codes → FTM property names
 ├── ftm_to_bods/
 │   ├── converter.py          # FTMToBODSConverter — two-pass orchestrator

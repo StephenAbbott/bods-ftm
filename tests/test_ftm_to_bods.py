@@ -142,8 +142,10 @@ class TestIdentifierSchemeResolution:
     def test_gb_registration_number_uses_gb_coh(self):
         assert _resolve_scheme("registrationNumber", "misc-regnum", "GB") == "GB-COH"
 
-    def test_us_registration_number_uses_us_ein(self):
-        assert _resolve_scheme("registrationNumber", "misc-regnum", "US") == "US-EIN"
+    def test_us_registration_number_is_not_an_ein(self):
+        # A US registrationNumber is a state filing number; EINs come from
+        # irsCode. It must never be labelled US-EIN.
+        assert _resolve_scheme("registrationNumber", "misc-regnum", "US") == "REG-US"
 
     def test_unknown_jurisdiction_uses_reg_alpha2(self):
         # KE (Kenya) is not in the hardcoded dict — should fall back to REG-KE.
