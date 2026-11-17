@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from followthemoney import model
+from followthemoney.proxy import EntityProxy
+
 # Mapping from BODS identifier scheme codes (org-id.guide format) to
 # FollowTheMoney Company property names.
 # Where no specific FTM property exists, falls back to registrationNumber.
@@ -11,8 +14,12 @@ SCHEME_TO_FTM_PROPERTY: dict[str, str] = {
     # United Kingdom
     "GB-COH": "registrationNumber",
     # United States
-    "US-EIN": "taxNumber",
-    "US-SEC-CIK": "registrationNumber",
+    # FtM 4.11.3: ``irsCode`` (US EIN, on Organization and its subclasses)
+    # and ``cikCode`` (SEC Central Index Key, on LegalEntity). Where the FtM
+    # schema has no irsCode (a bare LegalEntity) or FtM refuses the value as
+    # an EIN, the entity mapper writes it to taxNumber instead.
+    "US-EIN": "irsCode",
+    "US-SEC-CIK": "cikCode",
     # European Union / Member States
     "BE-BCE_KBO": "registrationNumber",
     "DE-HRB": "registrationNumber",
@@ -58,6 +65,16 @@ FTM_PROPERTY_TO_SCHEME: dict[str, str] = {
     "taxNumber": "US-EIN",           # placeholder; override with jurisdiction
     "innCode": "RU-INN",
     "ogrnCode": "RU-OGRN",
+    "irsCode": "US-EIN",
+    "cikCode": "US-SEC-CIK",
+}
+
+# Where an identifier's dedicated FtM property is absent from the schema, or
+# FtM's cleaning refuses the value, it is written here instead so it is not
+# lost.
+FTM_PROPERTY_FALLBACK: dict[str, str] = {
+    "irsCode": "taxNumber",
+    "cikCode": "registrationNumber",
 }
 
 
@@ -108,3 +125,18 @@ def ftm_property_to_bods_scheme(
         if candidate in SCHEME_TO_FTM_PROPERTY:
             return candidate
     return FTM_PROPERTY_TO_SCHEME.get(prop, "misc")
+
+
+def add_identifier(proxy: EntityProxy, ftm_prop: str, value: str) -> None:
+    """Add an identifier to ``proxy``, falling back (``FTM_PROPERTY_FALLBACK``)
+    when the schema lacks the property or FtM's cleaning refuses the value."""
+    if proxy.schema.get(ftm_prop) is not None:
+        # Clean on a scratch entity first: an add FtM refuses is silent.
+        probe = model.make_entity(proxy.schema)
+        probe.add(ftm_prop, value, quiet=True)
+        if probe.get(ftm_prop, quiet=True):
+            proxy.add(ftm_prop, value, quiet=True)
+            return
+    fallback = FTM_PROPERTY_FALLBACK.get(ftm_prop)
+    if fallback:
+        proxy.add(fallback, value, quiet=True)

@@ -7,6 +7,7 @@ from followthemoney.proxy import EntityProxy
 
 from bods_ftm.bods_to_ftm.identifier_mapper import (
     BODS_SCHEMES_NO_FTM_PROPERTY,
+    add_identifier,
     bods_scheme_to_ftm_property,
 )
 from bods_ftm.utils.dates import normalise_date
@@ -95,7 +96,7 @@ def entity_statement_to_ftm(statement: dict[str, Any]) -> EntityProxy | None:
             continue
         ftm_prop = bods_scheme_to_ftm_property(scheme)
         if ftm_prop:
-            proxy.add(ftm_prop, id_value, quiet=True)
+            add_identifier(proxy, ftm_prop, id_value)
 
     # Addresses
     for addr_obj in details.get("addresses", []):
